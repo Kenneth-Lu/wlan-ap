@@ -12,7 +12,7 @@ The basic procedure is the same as described in the root [README.md](../../READM
 To generate the .config file, use the following command:
 ```
 cd openwrt
-./scripts/gen_config.py ea8300 wlan-ap-consumer wifi
+./scripts/gen_config.py ea8300 wlan-ap-consumer wifi-common wifi-ac-qca
 ```
 
 Immediately after this step, apply patches found in `feeds/wlan-ap-consumer/additional-patches`:
