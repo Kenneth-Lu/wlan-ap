@@ -1,0 +1,6 @@
+---
+profile: linksys_ea8300
+target: ipq40xx
+subtarget: generic
+linked_profile_list: wlan-ap-consumer wifi-common wifi-ac-qca
+description: Build image for the Linksys EA8300 with consumer

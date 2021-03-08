@@ -16,7 +16,7 @@ new file mode 100755
 index 0000000000..32cc7353ce
 --- /dev/null
 +++ b/scripts/gen_config.py
-@@ -0,0 +1,184 @@
+@@ -0,0 +1,198 @@
 +#!/usr/bin/env python3
 +
 +from os import getenv
@@ -91,6 +91,19 @@ index 0000000000..32cc7353ce
 +        Path("./feeds.conf").unlink()
 +    if Path("./.config").is_file():
 +        Path("./.config").unlink()
++
++
++def append_linked_profile_list(profile_list):
++    result_list = profile_list
++    if len(profile_list) == 1:
++        the_only_profile = profile_list[0]
++        the_only_profile_file = (profile_folder / the_only_profile).with_suffix(".yml")
++        the_only_profile_data = yaml.safe_load(the_only_profile_file.read_text())
++        if "linked_profile_list" in the_only_profile_data.keys():
++            linked_profile_list_str = the_only_profile_data["linked_profile_list"]
++            profile_list_str = profile_list[0] + " " + linked_profile_list_str
++            result_list = list(profile_list_str.split())
++    return result_list
 +
 +
 +def merge_profiles(profiles):
@@ -188,7 +201,8 @@ index 0000000000..32cc7353ce
 +        print("Tree is now clean")
 +        quit(0)
 +
-+    profile = merge_profiles(sys.argv[1:])
++    profile_list = append_linked_profile_list(sys.argv[1:])
++    profile = merge_profiles(profile_list)
 +
 +    print("Using the following profiles:")
 +    for d in profile.get("description"):
