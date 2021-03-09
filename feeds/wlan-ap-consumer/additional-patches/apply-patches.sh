@@ -7,7 +7,7 @@ if [ ! -d "$PATCH_PATH" ]; then
     echo "openwrt directory does not exist: $(dirname $0)/$PATCH_PATH"
     exit 1
 fi
-patch -d "$PATCH_PATH" -p1 < "openwrt_feed_update.patch"
+patch -d "$PATCH_PATH" -p1 < "openwrt-feed-update.patch"
 echo
 echo "openwrt patched"
 echo
