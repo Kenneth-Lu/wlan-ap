@@ -12,12 +12,17 @@ Subject: [PATCH] lib/hostap: WAR fixes in wpas
  #define WPAS_CLI(wpas, ...) E(CMD_TIMEOUT("wpa_cli", "-p", wpas->ctrl.sockdir, "-i", wpas->ctrl.bss, ## __VA_ARGS__))
  #define EV(x) strchomp(strdupa(x), " ")
  
-@@ -448,7 +448,7 @@ wpas_bss_get_network(struct schema_Wifi_VIF_State *vstate,
+@@ -448,8 +448,11 @@ wpas_bss_get_network(struct schema_Wifi_VIF_State *vstate,
      psk = ini_geta(network, "psk") ?: "";
  
      /* entry in file looks actually like this: psk="passphrase", so remove the: " */
 -    psk++;
-+    //psk++;
-     if (strlen(psk) > 0) psk[strlen(psk)-1] = 0;
+-    if (strlen(psk) > 0) psk[strlen(psk)-1] = 0;
++    if (*psk == '"')
++    {
++        psk++;
++        if (strlen(psk) > 0) psk[strlen(psk)-1] = 0;
++    }
  
      if ((vstate->parent_exists = (bssid != NULL)))
+         STRSCPY_WARN(vstate->parent, bssid);
