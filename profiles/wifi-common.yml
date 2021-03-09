@@ -2,10 +2,8 @@
 description: Add the wifi common support from OpenWrt HEAD
 feeds:
   - name: wifi_common
-    path: ../../feeds/wifi-common-trunk
+    path: ../../feeds/wifi-common
 packages:
   - kmod-batman-adv
   - batctl-default
-
-diffconfig: |
-  CONFIG_WPA_MSG_MIN_PRIORITY=0
+  

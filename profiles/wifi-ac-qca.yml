@@ -2,7 +2,7 @@
 description: Add the wifi ac qca support from OpenWrt HEAD
 feeds:
   - name: wifi_ac_qca
-    path: ../../feeds/wifi-ac-qca-trunk
+    path: ../../feeds/wifi-ac-qca
 packages:
   - ath10k-firmware-qca4019-ct-htt
   - ath10k-firmware-qca9888-ct-htt
