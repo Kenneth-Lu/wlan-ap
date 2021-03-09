@@ -1,0 +1,6 @@
+---
+description: Add the wifi ac bcm support
+feeds:
+  - name: wifi_ac_bcm
+    path: ../../feeds/wifi-ac-bcm
+packages:
