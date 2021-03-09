@@ -1,0 +1,6 @@
+---
+description: Add the wifi ac mtk support
+feeds:
+  - name: wifi_ac_mtk
+    path: ../../feeds/wifi-ac-mtk
+packages:
