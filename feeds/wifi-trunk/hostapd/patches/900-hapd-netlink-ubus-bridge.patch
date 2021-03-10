@@ -24,10 +24,10 @@
  	int rate; /* rate in 100 kbps */
 --- a/src/ap/ieee802_11.c
 +++ b/src/ap/ieee802_11.c
-@@ -4928,6 +4928,7 @@ int ieee802_11_mgmt(struct hostapd_data
- 	int ret = 0;
+@@ -4962,6 +4962,7 @@ int ieee802_11_mgmt(struct hostapd_data
  	unsigned int freq;
  	int ssi_signal = fi ? fi->ssi_signal : 0;
+	char *stype_str = NULL;
 +	int ubus_resp;
  
  	if (len < 24)
