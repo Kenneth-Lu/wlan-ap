@@ -55,15 +55,15 @@ diff -urN a/src/ap/ieee802_11.c b/src/ap/ieee802_11.c
  
  /**
   * ieee802_11_mgmt - process incoming IEEE 802.11 management frames
-@@ -4928,6 +4961,7 @@
- 	int ret = 0;
+@@ -4929,6 +4962,7 @@
  	unsigned int freq;
  	int ssi_signal = fi ? fi->ssi_signal : 0;
+ 	int ubus_resp;
 +	char *stype_str = NULL;
  
  	if (len < 24)
  		return 0;
-@@ -4979,6 +5013,34 @@
+@@ -4980,6 +5014,34 @@
  		return 1;
  	}
  
