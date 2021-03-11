@@ -1,0 +1,27 @@
+diff -ruN a/src/sm/src/sm.h b/src/sm/src/sm.h
+--- a/src/sm/src/sm.h	2021-02-25 07:58:48.686613644 +0530
++++ b/src/sm/src/sm.h	2021-03-11 14:29:34.365912171 +0530
+@@ -306,4 +306,6 @@
+         uint64_t   *reporting_timestamp,
+         uint64_t   *report_ts);
+ 
++int sm_nl_global_init(struct ev_loop *);
++
+ #endif /* SM_H_INCLUDED */
+diff -ruN a/src/sm/src/sm_main.c b/src/sm/src/sm_main.c
+--- a/src/sm/src/sm_main.c	2021-02-25 07:58:48.686613644 +0530
++++ b/src/sm/src/sm_main.c	2021-03-11 14:11:18.727627849 +0530
+@@ -116,6 +116,13 @@
+         return -1;
+     }
+ 
++    if (sm_nl_global_init(loop) < 0)
++    {
++        LOG(ERR,"Initializing SM"
++             "(Failed to init)");
++        return -1;
++    }
++
+     if (!sm_scan_schedule_init())
+     {
+         LOG(ERR,"Initializing SM"
