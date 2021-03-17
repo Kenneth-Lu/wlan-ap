@@ -1,0 +1,13 @@
+diff -urN a/src/ap/dhcp_snoop.c b/src/ap/dhcp_snoop.c
+--- a/src/ap/dhcp_snoop.c	2021-03-12 19:35:44.274002624 +0530
++++ b/src/ap/dhcp_snoop.c	2021-03-12 19:35:26.750280414 +0530
+@@ -152,6 +152,9 @@
+ 
+ int dhcp_snoop_init(struct hostapd_data *hapd)
+ {
++    if (!strlen(hapd->conf->bridge))
++        return 0;
++
+ 	hapd->sock_dhcp = x_snoop_get_l2_packet(hapd, handle_dhcp,
+ 						L2_PACKET_FILTER_DHCP);
+ 	if (hapd->sock_dhcp == NULL) {

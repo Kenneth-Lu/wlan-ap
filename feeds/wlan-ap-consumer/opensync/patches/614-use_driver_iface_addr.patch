@@ -1,0 +1,22 @@
+diff -urN a/src/lib/hostap/inc/opensync-hapd.h b/src/lib/hostap/inc/opensync-hapd.h
+--- a/src/lib/hostap/inc/opensync-hapd.h	2021-03-16 16:34:46.785867164 +0530
++++ b/src/lib/hostap/inc/opensync-hapd.h	2021-03-16 16:34:46.785867164 +0530
+@@ -40,6 +40,7 @@
+     int ieee80211n;
+     int ieee80211ac;
+     int ieee80211ax;
++    char bssid[6];
+     char htcaps[256];
+     char vhtcaps[512];
+     char country[32];
+diff -urN a/src/lib/hostap/src/hapd.c b/src/lib/hostap/src/hapd.c
+--- a/src/lib/hostap/src/hapd.c	2021-03-16 16:34:46.785867164 +0530
++++ b/src/lib/hostap/src/hapd.c	2021-03-16 16:36:28.383526322 +0530
+@@ -581,6 +581,7 @@
+     csnprintf(&buf, &len, "ieee80211ac=%d\n", hapd_11ac_enabled(rconf));
+     csnprintf(&buf, &len, "%s", hapd->ieee80211ax ? "" : "#");
+     csnprintf(&buf, &len, "ieee80211ax=%d\n", hapd_11ax_enabled(rconf));
++    csnprintf(&buf, &len, "use_driver_iface_addr=1\n");
+ 
+     /* FIXME: ieee80211n, iee80211ac, ieee80211ax is missing, also min_hw_mode..
+      * perhaps some of this needs to be scheduled for wireless api rework
