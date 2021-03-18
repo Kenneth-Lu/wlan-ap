@@ -1,0 +1,24 @@
+diff -urN a/src/lib/hostap/inc/opensync-hapd.h b/src/lib/hostap/inc/opensync-hapd.h
+--- a/src/lib/hostap/inc/opensync-hapd.h	2021-03-18 22:39:26.313425941 +0530
++++ b/src/lib/hostap/inc/opensync-hapd.h	2021-03-18 22:44:08.905977978 +0530
+@@ -43,6 +43,7 @@
+     char htcaps[256];
+     char vhtcaps[512];
+     char country[32];
++    int noscan; /* skip initial obss scan */
+     void (*sta_connected)(struct hapd *hapd, const char *mac, const char *keyid);
+     void (*sta_disconnected)(struct hapd *hapd, const char *mac);
+     void (*ap_enabled)(struct hapd *hapd);
+diff -urN a/src/lib/hostap/src/hapd.c b/src/lib/hostap/src/hapd.c
+--- a/src/lib/hostap/src/hapd.c	2021-03-18 22:37:52.946708557 +0530
++++ b/src/lib/hostap/src/hapd.c	2021-03-18 22:46:08.956656456 +0530
+@@ -664,6 +664,9 @@
+     if (rconf->bcn_int_exists)
+         csnprintf(&buf, &len, "beacon_int=%d\n", rconf->bcn_int);
+ 
++    if (hapd->noscan)
++        csnprintf(&buf, &len, "noscan=1\n");
++
+     WARN_ON(len == 1); /* likely buf was truncated */
+ 
+     return hapd_conf_gen_psk(hapd, vconf);
