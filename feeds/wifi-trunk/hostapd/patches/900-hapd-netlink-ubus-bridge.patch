@@ -889,3 +889,13 @@
  		if (sta->ipaddr == b->your_ip)
  			return;
  
+@@ -138,6 +152,9 @@ static void handle_dhcp(void *ctx, const
+ 
+ int dhcp_snoop_init(struct hostapd_data *hapd)
+ {
++	if (!strlen(hapd->conf->bridge))
++		return 0;
++
+ 	hapd->sock_dhcp = x_snoop_get_l2_packet(hapd, handle_dhcp,
+ 						L2_PACKET_FILTER_DHCP);
+ 	if (hapd->sock_dhcp == NULL) {
