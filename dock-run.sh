@@ -12,8 +12,21 @@ params="-v ${PWD}:${PWD} --rm -w ${PWD} -u"$(id -u):$(id -g)" $groups -v/etc/pas
     params+=" -v${HOME}/.ssh/known_hosts:${HOME}/.ssh/known_hosts"
 }
 
+# If both stdout and stdin are a tty, run in interactive mode
+[ -t 1 -a -t 0 ] && {
+    params+=" --tty"
+    params+=" --interactive"
+    params+=" -edebian_chroot=*DOCKER*"
+}
+
 # Append the tag after all options, but before the command
 params+=" ${tag}"
+
+# Run bash if no other command is specified
+[ $# -eq 0 ] && {
+    params+=" /bin/bash -i"
+}
+
 
 docker build --tag=${tag} docker
 
