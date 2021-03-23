@@ -49,8 +49,8 @@ define Build/Prepare
 	rm $(PKG_BUILD_DIR)/{vendor,platform,service-provider}
 	mkdir $(PKG_BUILD_DIR)/core
 	[ ! -d ./src/service-provider/ ] || $(CP) ./src/service-provider/. $(PKG_BUILD_DIR)/service-provider/
-	git clone --single-branch --branch plume/dev git@github.com:plume-design/opensync-platform-cfg80211.git $(PKG_BUILD_DIR)/platform/cfg80211
-	git clone --single-branch --branch plume/dev git@github.com:plume-design/opensync-vendor-plume-openwrt.git $(PKG_BUILD_DIR)/vendor/plume-openwrt
+	git clone --single-branch --branch plume/dev_0.5.0.0 git@github.com:plume-design/opensync-platform-cfg80211.git $(PKG_BUILD_DIR)/platform/cfg80211
+	git clone --single-branch --branch plume/dev_0.5.0.0 git@github.com:plume-design/opensync-vendor-plume-openwrt.git $(PKG_BUILD_DIR)/vendor/plume-openwrt
 	$(Build/Patch)
 	cp $(BUILD_DIR)/hostapd-wpad-full-openssl/hostapd-2020-06-08-5a8b3662/src/utils/os_unix.o $(STAGING_DIR)/usr/lib/
 	cp $(BUILD_DIR)/hostapd-wpad-full-openssl/hostapd-2020-06-08-5a8b3662/src/common/wpa_ctrl.o $(STAGING_DIR)/usr/lib/
