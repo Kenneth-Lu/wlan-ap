@@ -1,4 +1,7 @@
-#!/bin/bash -ex
+#!/bin/bash -e
+
+# If the first parameter is '-x', enable xtrace
+[ "$1" == "-x" ] && { set -x ; shift ; }
 
 tag=$(echo ${PWD} | tr / - | cut -b2- | tr A-Z a-z)
 groups=$(id -G | xargs -n1 echo -n " --group-add ")
@@ -31,4 +34,5 @@ params+=" ${tag}"
 
 docker build --tag=${tag} docker
 
+set -x
 docker run $params "$@"
