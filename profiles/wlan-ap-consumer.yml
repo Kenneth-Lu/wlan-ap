@@ -65,6 +65,8 @@ packages:
   - miniupnpd
   - mxml
   - iputils-arping
+  - firewall
+  - iproute2
 
 diffconfig: |
   CONFIG_OPENSSL_ENGINE=y
