@@ -1,19 +1,23 @@
 From: aparna.salian <aparna.salian@globaledgesoft.com>
 Subject: [PATCH] lib/hostap: Enable hostapd config option to skip initial obss scan
 
+Index: a/src/lib/hostap/inc/opensync-hapd.h
+===================================================================
 --- a/src/lib/hostap/inc/opensync-hapd.h
 +++ b/src/lib/hostap/inc/opensync-hapd.h
-@@ -43,6 +43,7 @@ struct hapd {
-     char htcaps[256];
+@@ -44,6 +44,7 @@ struct hapd {
      char vhtcaps[512];
      char country[32];
+     int skip_probe_response;
 +    int noscan; /* skip initial obss scan */
      void (*sta_connected)(struct hapd *hapd, const char *mac, const char *keyid);
      void (*sta_disconnected)(struct hapd *hapd, const char *mac);
      void (*ap_enabled)(struct hapd *hapd);
+Index: a/src/lib/hostap/src/hapd.c
+===================================================================
 --- a/src/lib/hostap/src/hapd.c
 +++ b/src/lib/hostap/src/hapd.c
-@@ -664,6 +664,9 @@ hapd_conf_gen(struct hapd *hapd,
+@@ -673,6 +673,9 @@ hapd_conf_gen(struct hapd *hapd,
      if (rconf->bcn_int_exists)
          csnprintf(&buf, &len, "beacon_int=%d\n", rconf->bcn_int);
  

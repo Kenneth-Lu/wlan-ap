@@ -1,29 +1,14 @@
 From: Shubham Pawar <p.shubham@globaledgesoft.com>
 Subject: [PATCH] lib/hostap: hw_mode set/get support
 
---- a/src/lib/hostap/inc/opensync-hapd.h
-+++ b/src/lib/hostap/inc/opensync-hapd.h
-@@ -37,6 +37,11 @@ struct hapd {
-     char conf[4096];
-     char psks[4096];
-     int respect_multi_ap;
-+    int ieee80211n;
-+    int ieee80211ac;
-+    int ieee80211ax;
-+    char htcaps[256];
-+    char vhtcaps[512];
-     void (*sta_connected)(struct hapd *hapd, const char *mac, const char *keyid);
-     void (*sta_disconnected)(struct hapd *hapd, const char *mac);
-     void (*ap_enabled)(struct hapd *hapd);
-diff --git a/src/lib/hostap/src/hapd.c b/src/lib/hostap/src/hapd.c
-index e01db43d..b9ba21eb 100644
+Index: a/src/lib/hostap/src/hapd.c
+===================================================================
 --- a/src/lib/hostap/src/hapd.c
 +++ b/src/lib/hostap/src/hapd.c
-@@ -321,6 +321,36 @@ hapd_map_int2str(int i)
-     return "none";
+@@ -327,6 +327,36 @@ hapd_map_int2str(int i)
  }
  
-+static int
+ static int
 +hapd_11n_enabled(const struct schema_Wifi_Radio_Config *rconf)
 +{
 +    if (!rconf->hw_mode_exists) return 0;
@@ -53,10 +38,11 @@ index e01db43d..b9ba21eb 100644
 +    return 0;
 +}
 +
- static int
++static int
  hapd_conf_gen_psk(struct hapd *hapd,
                    const struct schema_Wifi_VIF_Config *vconf)
-@@ -377,6 +407,92 @@ hapd_conf_gen_psk(struct hapd *hapd,
+ {
+@@ -382,6 +412,92 @@ hapd_conf_gen_psk(struct hapd *hapd,
      return 0;
  }
  
@@ -149,20 +135,23 @@ index e01db43d..b9ba21eb 100644
  int
  hapd_conf_gen(struct hapd *hapd,
                const struct schema_Wifi_Radio_Config *rconf,
-@@ -412,10 +528,30 @@ hapd_conf_gen(struct hapd *hapd,
+@@ -416,6 +532,12 @@ hapd_conf_gen(struct hapd *hapd,
+     csnprintf(&buf, &len, "wmm_enabled=1\n");
      csnprintf(&buf, &len, "%s", hapd->respect_multi_ap ? "" : "#");
      csnprintf(&buf, &len, "multi_ap=%d\n", hapd_map_str2int(vconf));
-     csnprintf(&buf, &len, "uapsd_advertisement_enabled=%d\n", vconf->uapsd_enable);
 +    csnprintf(&buf, &len, "%s", hapd->ieee80211n ? "" : "#");
 +    csnprintf(&buf, &len, "ieee80211n=%d\n", hapd_11n_enabled(rconf));
 +    csnprintf(&buf, &len, "%s", hapd->ieee80211ac ? "" : "#");
 +    csnprintf(&buf, &len, "ieee80211ac=%d\n", hapd_11ac_enabled(rconf));
 +    csnprintf(&buf, &len, "%s", hapd->ieee80211ax ? "" : "#");
 +    csnprintf(&buf, &len, "ieee80211ax=%d\n", hapd_11ax_enabled(rconf));
+     csnprintf(&buf, &len, "uapsd_advertisement_enabled=%d\n", vconf->uapsd_enable);
+     csnprintf(&buf, &len, "send_probe_response=%d\n", hapd->skip_probe_response ? 0 : 1);
  
-     /* FIXME: ieee80211n, iee80211ac, ieee80211ax is missing, also min_hw_mode..
+@@ -423,6 +545,21 @@ hapd_conf_gen(struct hapd *hapd,
       * perhaps some of this needs to be scheduled for wireless api rework
       */
+ 
 +    if (hapd_11ac_enabled(rconf))
 +        if (strcmp(rconf->freq_band, "2.4G")) {
 +            csnprintf(&buf, &len, "vht_oper_chwidth=%d\n",
@@ -177,10 +166,11 @@ index e01db43d..b9ba21eb 100644
 +
 +    if (hapd->ieee80211ac)
 +        csnprintf(&buf, &len, "vht_capab=%s\n", hapd->vhtcaps);
- 
++
      /* FIXME: this should be able to implement min_hw_mode on setups where
       * hostapd's driver respects things like: supported_rates, basic_rates,
-@@ -769,7 +905,10 @@ hapd_conf_strip(char *buf)
+      * beacon_rate,  etc.
+@@ -773,7 +910,10 @@ hapd_conf_strip(char *buf)
       * have changed and therefore should not be reloaded.
       */
      while ((line = strsep(&lines, "\n")))
@@ -192,3 +182,19 @@ index e01db43d..b9ba21eb 100644
              csnprintf(&ptr, &len, "%s\n", line);
      strscpy(buf, tmp, buf_size); /* its guaranteed to fit */
      return buf;
+Index: a/src/lib/hostap/inc/opensync-hapd.h
+===================================================================
+--- a/src/lib/hostap/inc/opensync-hapd.h
++++ b/src/lib/hostap/inc/opensync-hapd.h
+@@ -37,6 +37,11 @@ struct hapd {
+     char conf[4096];
+     char psks[4096];
+     int respect_multi_ap;
++    int ieee80211n;
++    int ieee80211ac;
++    int ieee80211ax;
++    char htcaps[256];
++    char vhtcaps[512];
+     int skip_probe_response;
+     void (*sta_connected)(struct hapd *hapd, const char *mac, const char *keyid);
+     void (*sta_disconnected)(struct hapd *hapd, const char *mac);

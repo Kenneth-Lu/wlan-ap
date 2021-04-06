@@ -1,12 +1,12 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=opensync
-PKG_VERSION:=2.0.5.0
+PKG_VERSION:=2.0.7.0
 PKG_RELEASE:=1
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/plume-design/opensync.git
-PKG_SOURCE_DATE:=2020-06-28
-PKG_SOURCE_VERSION:=ee8945e44366087832bdafdf69784c6a87e3a5e6
+PKG_SOURCE_DATE:=2020-07-31
+PKG_SOURCE_VERSION:=6d35f861772f342a1e9288a5eea91a186350ff6a
 
 PKG_BUILD_DEPENDS:=python3-kconfiglib/host python3-jinja2/host python3-markupsafe/host
 HOST_BUILD_DEPENDS:=protobuf-c/host

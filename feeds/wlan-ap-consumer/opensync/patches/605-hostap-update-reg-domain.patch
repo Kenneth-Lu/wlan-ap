@@ -1,6 +1,8 @@
 From: aparna.salian <aparna.salian@globaledgesoft.com>
 Subject: [PATCH] lib/hostap: Update regulatory domain in hostapd conf for DFS channel support
 
+Index: a/src/lib/hostap/inc/opensync-hapd.h
+===================================================================
 --- a/src/lib/hostap/inc/opensync-hapd.h
 +++ b/src/lib/hostap/inc/opensync-hapd.h
 @@ -42,6 +42,7 @@ struct hapd {
@@ -8,13 +10,15 @@ Subject: [PATCH] lib/hostap: Update regulatory domain in hostapd conf for DFS ch
      char htcaps[256];
      char vhtcaps[512];
 +    char country[32];
+     int skip_probe_response;
      void (*sta_connected)(struct hapd *hapd, const char *mac, const char *keyid);
      void (*sta_disconnected)(struct hapd *hapd, const char *mac);
-     void (*ap_enabled)(struct hapd *hapd);
+Index: a/src/lib/hostap/src/hapd.c
+===================================================================
 --- a/src/lib/hostap/src/hapd.c
-+++ b/src/lib/hostap/src/hapd.c
-@@ -607,6 +607,12 @@ hapd_conf_gen(struct hapd *hapd,
-         csnprintf(&buf, &len, "eap_server=%d\n", vconf->wps ? 1 : 0);
++++ b/lib/hostap/src/hapd.c
+@@ -616,6 +616,12 @@ hapd_conf_gen(struct hapd *hapd,
+         csnprintf(&buf, &len, "pbc_in_m1=1\n");
      }
  
 +    if (strlen(hapd->country) > 0) {
