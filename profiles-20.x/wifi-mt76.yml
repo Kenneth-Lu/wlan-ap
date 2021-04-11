@@ -1,0 +1,9 @@
+---
+description: wifi support for Mediatek
+feeds:
+  - name: wifi
+    path: ../../feeds/wifi-mt76
+packages:
+  - kmod-mt7915e
+  - batctl-default
+

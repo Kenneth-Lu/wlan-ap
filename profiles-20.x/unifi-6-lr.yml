@@ -1,0 +1,11 @@
+---
+profile: ubnt_unifi-6-lr
+target: mediatek
+subtarget: mt7622
+description: Build image for UBNT unifi-6-lr
+packages:
+  - kmod-mt7915e
+  - kmod-btmtkuart
+  - mt7622bt-firmware
+diffconfig: |
+  CONFIG_TARGET_mediatek_mt7622_DEVICE_ubnt_unifi-6-lr=y
