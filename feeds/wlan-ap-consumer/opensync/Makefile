@@ -8,11 +8,8 @@ PKG_SOURCE_URL:=https://github.com/plume-design/opensync.git
 PKG_SOURCE_DATE:=2020-06-28
 PKG_SOURCE_VERSION:=ee8945e44366087832bdafdf69784c6a87e3a5e6
 
-PKG_BUILD_DEPENDS:=python3-kconfiglib/host python3-jinja2/host python3-markupsafe/host
-HOST_BUILD_DEPENDS:=protobuf-c/host
+PKG_BUILD_DEPENDS:=python3-kconfiglib/host python3-jinja2/host python3-markupsafe/host protobuf-c/host
 
-include $(INCLUDE_DIR)/package.mk
-include $(INCLUDE_DIR)/host-build.mk
 include $(INCLUDE_DIR)/package.mk
 
 define Host/Configure
@@ -106,5 +103,4 @@ define Package/opensync/install
 	$(MAKE) -C $(PKG_BUILD_DIR)/ $(TARGET) rootfs-copy-only INSTALL_ROOTFS_DIR=$(1)
 endef
 
-$(eval $(call HostBuild))
 $(eval $(call BuildPackage,opensync))
