@@ -51,3 +51,30 @@ diff -urN a/package/network/utils/iproute2/Makefile b/package/network/utils/ipro
  endef
  
  define Package/tc/install
+diff -urN a/package/feeds/packages/coreutils/Makefile b/package/feeds/packages/coreutils/Makefile
+--- a/package/feeds/packages/coreutils/Makefile	2021-04-09 12:27:14.303376781 +0800
++++ b/package/feeds/packages/coreutils/Makefile	2021-04-09 12:27:57.031506251 +0800
+@@ -65,11 +65,11 @@
+ DEPENDS_expr = +libgmp
+ DEPENDS_factor = +libgmp
+ DEPENDS_cp = +libacl
+-DEPENDS_dir = +libacl +libcap
++DEPENDS_dir = +libacl +libcap-ng
+ DEPENDS_install = +libacl
+-DEPENDS_ls = +libacl +libcap
++DEPENDS_ls = +libacl +libcap-ng
+ DEPENDS_mv = +libacl
+-DEPENDS_vdir = +libacl +libcap
++DEPENDS_vdir = +libacl +libcap-ng
+ 
+ FILES_stdbuf := usr/lib/coreutils/libstdbuf.so
+ 
+@@ -124,7 +124,7 @@
+ 	--disable-assert \
+ 	--disable-rpath \
+ 	--disable-libsmack \
+-	--enable-libcap \
++	--enable-libcap-ng \
+ 	--without-linux-crypto \
+ 	--without-openssl \
+ 	--$(if $(CONFIG_USE_MUSL),with,without)-included-regex \
