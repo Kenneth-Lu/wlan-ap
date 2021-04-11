@@ -2,7 +2,7 @@
 
 cd "$(dirname $0)"
 
-PATCH_PATH="../../../openwrt/"
+PATCH_PATH="../../../openwrt-20.x/"
 if [ ! -d "$PATCH_PATH" ]; then
     echo "openwrt directory does not exist: $(dirname $0)/$PATCH_PATH"
     exit 1
