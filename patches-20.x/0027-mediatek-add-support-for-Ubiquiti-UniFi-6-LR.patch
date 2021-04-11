@@ -1,0 +1,519 @@
+From 634c13c186646aff2badb51a43b248825d0fe5a0 Mon Sep 17 00:00:00 2001
+From: David Bauer <mail@david-bauer.net>
+Date: Thu, 11 Feb 2021 17:09:06 +0100
+Subject: [PATCH] mediatek: add support for Ubiquiti UniFi 6 LR
+
+Hardware
+--------
+
+MediaTek MT7622
+512MB DDR3 RAM
+64M SPI-NOR Flash (Winbond W25Q512JV)
+MediaTek MT7622 802.11bgn 4T4R WMAC
+MediaTek MT7915 802.11ax 4T4R
+Marvell AQR1112 100/1000/2500 NBase-T PHY
+Holtek HT32F52241 LED controller
+Reset Switch
+
+UART
+----
+
+CPU UART0 at the pinout next to the Holtek MCU.
+
+Pinout (first pin next to SoC / MCU)
+
+0 3V3
+1 RX
+2 TX
+3 GND
+
+Settings are 115200 8N1.
+
+Opening the case
+----------------
+
+Opening the case is not a nice task, as itis glued together. Insert a
+flat knife between the front and back casing below the ethernet port.
+Open up a gap this way and insert a flat scredriver, remove the knife.
+
+Work your way around the casing by applying force to seperate the front
+and back casing. This losens the glue and opens the plastic clips. Be
+gentle, as these clips are very cheap and break quickly.
+
+Installation
+------------
+
+1. Connect to the booted device at 192.168.1.20 using username/password
+   "ubnt".
+
+2. Transfer the OpenWrt sysupgrade image to the device using SCP.
+
+3. Check the mtd partition number for bs / kernel0 / kernel1
+
+   $ cat /proc/mtd
+
+4. Set the bootselect flag to boot from kernel0
+
+   $ dd if=/dev/zero bs=1 count=1 of=/dev/mtdblock6
+
+5. Write the OpenWrt sysupgrade image to both kernel0 as well as kernel1
+
+   $ dd if=openwrt.bin of=/dev/mtdblock8
+   $ dd if=openwrt.bin of=/dev/mtdblock9
+
+6. Reboot the device. It should boot into OpenWrt.
+
+Signed-off-by: David Bauer <mail@david-bauer.net>
+---
+ .../lib/preinit/05_set_preinit_iface          |  10 +-
+ .../dts/mediatek/mt7622-ubnt-unifi-6-lr.dts   | 327 ++++++++++++++++++
+ target/linux/mediatek/image/mt7622.mk         |   9 +
+ .../mt7622/base-files/etc/board.d/02_network  |   3 +
+ target/linux/mediatek/mt7622/config-5.4       |   6 +-
+ .../patches-5.4/1020-spi-nor-w25q512jv.patch  |  25 ++
+ 6 files changed, 378 insertions(+), 2 deletions(-)
+ create mode 100644 target/linux/mediatek/files-5.4/arch/arm64/boot/dts/mediatek/mt7622-ubnt-unifi-6-lr.dts
+ create mode 100644 target/linux/mediatek/patches-5.4/1020-spi-nor-w25q512jv.patch
+
+diff --git a/target/linux/mediatek/base-files/lib/preinit/05_set_preinit_iface b/target/linux/mediatek/base-files/lib/preinit/05_set_preinit_iface
+index f39e8aee8d..3ac856d1c4 100644
+--- a/target/linux/mediatek/base-files/lib/preinit/05_set_preinit_iface
++++ b/target/linux/mediatek/base-files/lib/preinit/05_set_preinit_iface
+@@ -1,6 +1,14 @@
+ set_preinit_iface() {
+ 	ip link set eth0 up
+-	ifname=lan1
++
++	case $(board_name) in
++	ubnt,unifi-6-lr)
++		ifname=eth0
++		;;
++	*)
++		ifname=lan1
++		;;
++	esac
+ }
+ 
+ boot_hook_add preinit_main set_preinit_iface
+diff --git a/target/linux/mediatek/files-5.4/arch/arm64/boot/dts/mediatek/mt7622-ubnt-unifi-6-lr.dts b/target/linux/mediatek/files-5.4/arch/arm64/boot/dts/mediatek/mt7622-ubnt-unifi-6-lr.dts
+new file mode 100644
+index 0000000000..1f410b1d47
+--- /dev/null
++++ b/target/linux/mediatek/files-5.4/arch/arm64/boot/dts/mediatek/mt7622-ubnt-unifi-6-lr.dts
+@@ -0,0 +1,327 @@
++// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++
++/dts-v1/;
++#include <dt-bindings/input/input.h>
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/leds/common.h>
++
++#include "mt7622.dtsi"
++#include "mt6380.dtsi"
++
++/ {
++	model = "Ubiquiti UniFi 6 LR";
++	compatible = "ubnt,unifi-6-lr", "mediatek,mt7622";
++
++	aliases {
++		led-boot = &led_blue;
++		led-failsafe = &led_blue;
++		led-running = &led_blue;
++		led-upgrade = &led_blue;
++		label-mac-device = &gmac0;
++		serial0 = &uart0;
++	};
++
++	chosen {
++		stdout-path = "serial0:115200n8";
++		bootargs = "earlycon=uart8250,mmio32,0x11002000 swiotlb=512 console=ttyS0,115200n8";
++	};
++
++	cpus {
++		cpu@0 {
++			proc-supply = <&mt6380_vcpu_reg>;
++			sram-supply = <&mt6380_vm_reg>;
++		};
++
++		cpu@1 {
++			proc-supply = <&mt6380_vcpu_reg>;
++			sram-supply = <&mt6380_vm_reg>;
++		};
++	};
++
++	gpio-keys {
++		compatible = "gpio-keys";
++
++		reset {
++			label = "reset";
++			linux,code = <KEY_RESTART>;
++			gpios = <&pio 62 GPIO_ACTIVE_LOW>;
++		};
++	};
++
++	memory {
++		reg = <0 0x40000000 0 0x3f000000>;
++	};
++
++	reg_1p8v: regulator-1p8v {
++		compatible = "regulator-fixed";
++		regulator-name = "fixed-1.8V";
++		regulator-min-microvolt = <1800000>;
++		regulator-max-microvolt = <1800000>;
++		regulator-always-on;
++	};
++
++	reg_3p3v: regulator-3p3v {
++		compatible = "regulator-fixed";
++		regulator-name = "fixed-3.3V";
++		regulator-min-microvolt = <3300000>;
++		regulator-max-microvolt = <3300000>;
++		regulator-boot-on;
++		regulator-always-on;
++	};
++};
++
++&pcie0 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&pcie0_pins>;
++	status = "okay";
++};
++
++&slot0 {
++	wifi@0,0 {
++		reg = <0x0 0 0 0 0>;
++		mediatek,mtd-eeprom = <&factory 0x20000>;
++		mtd-mac-address = <&eeprom 0x6>;
++		ieee80211-freq-limit = <5000000 6000000>;
++	};
++};
++
++&pio {
++	eth_pins: eth-pins {
++		mux {
++			function = "eth";
++			groups = "mdc_mdio", "rgmii_via_gmac2";
++		};
++	};
++
++	pcie0_pins: pcie0-pins {
++		mux {
++			function = "pcie";
++			groups = "pcie0_pad_perst",
++				 "pcie0_1_waken",
++				 "pcie0_1_clkreq";
++		};
++	};
++
++	pcie1_pins: pcie1-pins {
++		mux {
++			function = "pcie";
++			groups = "pcie1_pad_perst",
++				 "pcie1_0_waken",
++				 "pcie1_0_clkreq";
++		};
++	};
++
++	pmic_bus_pins: pmic-bus-pins {
++		mux {
++			function = "pmic";
++			groups = "pmic_bus";
++		};
++	};
++
++	spi_nor_pins: spi-nor-pins {
++		mux {
++			function = "flash";
++			groups = "spi_nor";
++		};
++	};
++
++	uart0_pins: uart0-pins {
++		mux {
++			function = "uart";
++			groups = "uart0_0_tx_rx" ;
++		};
++	};
++
++	uart3_pins: uart3-pins {
++		mux {
++			function = "uart";
++			groups = "uart3_1_tx_rx" ;
++		};
++	};
++
++	i2c0_pins: i2c0-pins {
++		mux {
++			function = "i2c";
++			groups =  "i2c0";
++		};
++	};
++
++	watchdog_pins: watchdog-pins {
++		mux {
++			function = "watchdog";
++			groups = "watchdog";
++		};
++	};
++};
++
++&bch {
++	status = "okay";
++};
++
++&btif {
++	status = "disabled";
++};
++
++&eth {
++	status = "okay";
++	pinctrl-names = "default";
++	pinctrl-0 = <&eth_pins>;
++
++	gmac0: mac@0 {
++		compatible = "mediatek,eth-mac";
++		reg = <0>;
++
++		phy-mode = "2500base-x";
++		mtd-mac-address = <&eeprom 0x0>;
++
++		fixed-link {
++			speed = <2500>;
++			full-duplex;
++		};
++	};
++
++	mdio: mdio-bus {
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		ethernet-phy@8 {
++			/* Marvell AQRate AQR112W - no driver */
++			compatible = "ethernet-phy-ieee802.3-c45";
++			reg = <0x8>;
++		};
++	};
++};
++
++&pwrap {
++	pinctrl-names = "default";
++	pinctrl-0 = <&pmic_bus_pins>;
++
++	status = "okay";
++};
++
++&nor_flash {
++	pinctrl-names = "default";
++	pinctrl-0 = <&spi_nor_pins>;
++
++	status = "okay";
++
++	flash@0 {
++		compatible = "jedec,spi-nor";
++		reg = <0>;
++		spi-max-frequency = <50000000>;
++
++		partitions {
++			compatible = "fixed-partitions";
++			#address-cells = <1>;
++			#size-cells = <1>;
++
++			partition@0 {
++				label = "preloader";
++				reg = <0x0 0x40000>;
++				read-only;
++			};
++
++			partition@40000 {
++				label = "atf";
++				reg = <0x40000 0x20000>;
++				read-only;
++			};
++
++			partition@60000 {
++				label = "u-boot";
++				reg = <0x60000 0x60000>;
++				read-only;
++			};
++
++			partition@c0000 {
++				label = "u-boot-env";
++				reg = <0xc0000 0x10000>;
++			};
++
++			factory: partition@d0000 {
++				label = "factory";
++				reg = <0xd0000 0x40000>;
++				read-only;
++			};
++
++			eeprom: partition@110000 {
++				label = "eeprom";
++				reg = <0x110000 0x10000>;
++				read-only;
++			};
++
++			partition@120000 {
++				label = "bs";
++				reg = <0x120000 0x10000>;
++			};
++
++			partition@130000 {
++				label = "cfg";
++				reg = <0x130000 0x100000>;
++				read-only;
++			};
++
++			partition@230000 {
++				compatible = "denx,fit";
++				label = "firmware";
++				reg = <0x230000 0x1ee0000>;
++			};
++
++			partition@2110000 {
++				label = "kernel1";
++				reg = <0x2110000 0x1ee0000>;
++			};
++		};
++	};
++};
++
++&uart0 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&uart0_pins>;
++	status = "okay";
++};
++
++&uart3 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&uart3_pins>;
++	status = "okay";
++
++	/* MT7915 Bluetooth */
++};
++
++&i2c0 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&i2c0_pins>;
++	status = "okay";
++
++	led-controller@30 {
++		compatible = "ubnt,ledbar";
++		reg = <0x30>;
++
++		enable-gpio = <&pio 59 0>;
++
++		red {
++			label = "red";
++		};
++
++		green {
++			label = "green";
++		};
++
++		led_blue: blue {
++			label = "blue";
++		};
++	};
++};
++
++&watchdog {
++	pinctrl-names = "default";
++	pinctrl-0 = <&watchdog_pins>;
++	status = "okay";
++};
++
++&wmac {
++	mediatek,mtd-eeprom = <&factory 0x0>;
++	mtd-mac-address = <&eeprom 0x0>;
++	status = "okay";
++};
+diff --git a/target/linux/mediatek/image/mt7622.mk b/target/linux/mediatek/image/mt7622.mk
+index 0851184dcb..bf706930e4 100644
+--- a/target/linux/mediatek/image/mt7622.mk
++++ b/target/linux/mediatek/image/mt7622.mk
+@@ -58,3 +58,12 @@ define Device/mediatek_mt7622-ubi
+   DEVICE_PACKAGES := kmod-usb-ohci kmod-usb2 kmod-usb3 kmod-ata-ahci-mtk
+ endef
+ TARGET_DEVICES += mediatek_mt7622-ubi
++
++define Device/ubnt_unifi-6-lr
++  DEVICE_VENDOR := Ubiquiti
++  DEVICE_MODEL := UniFi 6 LR
++  DEVICE_DTS := mt7622-ubnt-unifi-6-lr
++  DEVICE_DTS_DIR := $(DTS_DIR)/mediatek
++  DEVICE_PACKAGES := kmod-mt7915e
++endef
++TARGET_DEVICES += ubnt_unifi-6-lr
+diff --git a/target/linux/mediatek/mt7622/base-files/etc/board.d/02_network b/target/linux/mediatek/mt7622/base-files/etc/board.d/02_network
+index 426d9937bf..3a409c8ec9 100755
+--- a/target/linux/mediatek/mt7622/base-files/etc/board.d/02_network
++++ b/target/linux/mediatek/mt7622/base-files/etc/board.d/02_network
+@@ -16,6 +16,9 @@ mediatek_setup_interfaces()
+ 	mediatek,mt7622-rfb1)
+ 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" wan
+ 		;;
++	ubnt,unifi-6-lr)
++		ucidef_set_interfaces_lan "eth0"
++		;;
+ 	*)
+ 		ucidef_add_switch "switch0" \
+ 				  "0:lan" "1:lan" "2:lan" "3:lan" "4:wan" "6u@eth0" "5u@eth1"
+diff --git a/target/linux/mediatek/mt7622/config-5.4 b/target/linux/mediatek/mt7622/config-5.4
+index e92789697d..1b0b1e36a6 100644
+--- a/target/linux/mediatek/mt7622/config-5.4
++++ b/target/linux/mediatek/mt7622/config-5.4
+@@ -333,6 +333,10 @@ CONFIG_HAVE_VIRT_CPU_ACCOUNTING_GEN=y
+ CONFIG_HOLES_IN_ZONE=y
+ CONFIG_HZ=250
+ CONFIG_HZ_250=y
++CONFIG_I2C=y
++CONFIG_I2C_BOARDINFO=y
++CONFIG_I2C_CHARDEV=y
++CONFIG_I2C_MT65XX=y
+ CONFIG_ICPLUS_PHY=y
+ CONFIG_IIO=y
+ CONFIG_IKCONFIG=y
+@@ -536,7 +540,7 @@ CONFIG_SPI=y
+ CONFIG_SPI_MASTER=y
+ CONFIG_SPI_MEM=y
+ CONFIG_SPI_MT65XX=y
+-# CONFIG_SPI_MTK_NOR is not set
++CONFIG_SPI_MTK_NOR=y
+ CONFIG_SPI_MTK_SNFI=y
+ CONFIG_SRCU=y
+ CONFIG_SWCONFIG=y
+diff --git a/target/linux/mediatek/patches-5.4/1020-spi-nor-w25q512jv.patch b/target/linux/mediatek/patches-5.4/1020-spi-nor-w25q512jv.patch
+new file mode 100644
+index 0000000000..1a16574c2b
+--- /dev/null
++++ b/target/linux/mediatek/patches-5.4/1020-spi-nor-w25q512jv.patch
+@@ -0,0 +1,25 @@
++From: David Bauer <mail@david-bauer.net>
++Date: Thu, 11 Feb 2021 19:57:26 +0100
++Subject: [PATCH] mtd: spi-nor: add support for Winbond W25Q512
++
++The Winbond W25Q512 is a 512mb SPI-NOR chip. It supports 4K sectors as
++well as block protection and Dual-/Quad-read.
++
++Tested on: Ubiquiti UniFi 6 LR
++
++Signed-off-by: David Bauer <mail@david-bauer.net>
++
++Ref: https://patchwork.ozlabs.org/project/linux-mtd/patch/20210213151047.11700-1-mail@david-bauer.net/
++
++--- a/drivers/mtd/spi-nor/spi-nor.c
+++++ b/drivers/mtd/spi-nor/spi-nor.c
++@@ -2550,6 +2550,9 @@ static const struct flash_info spi_nor_i
++ 			  .fixups = &w25q256_fixups },
++ 	{ "w25q256jvm", INFO(0xef7019, 0, 64 * 1024, 512,
++ 			     SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ) },
+++	{ "w25q512jv", INFO(0xef4020, 0, 64 * 1024, 1024,
+++			SECT_4K | SPI_NOR_QUAD_READ | SPI_NOR_DUAL_READ |
+++			SPI_NOR_HAS_TB | SPI_NOR_HAS_LOCK) },
++ 	{ "w25m512jv", INFO(0xef7119, 0, 64 * 1024, 1024,
++ 			SECT_4K | SPI_NOR_QUAD_READ | SPI_NOR_DUAL_READ) },
++ 
+-- 
+2.27.0
+
