@@ -30,6 +30,7 @@ define Package/opensync
 	DEPENDS  := +libev +jansson +protobuf +libprotobuf-c +libmosquitto +libopenssl +openvswitch +libpcap +libuci +libcurl +libubus +libblobmsg-json +tcpdump +curl +lldpd +hostapd
 	DEPENDS  += +libnl +@BUSYBOX_CUSTOM +@BUSYBOX_CONFIG_TIMEOUT +@PACKAGE_wpa-cli +@PACKAGE_hostapd-utils +@BUSYBOX_CONFIG_UDHCPD +@PACKAGE_ip-full +@BUSYBOX_CONFIG_LOGGER +@BUSYBOX_CONFIG_VCONFIG
 	DEPENDS  += +libmnl +mxml
+	DEPENDS  += +bluez-libs
 endef
 
 define Package/opensync/description
