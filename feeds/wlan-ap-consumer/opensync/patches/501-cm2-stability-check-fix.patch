@@ -1,7 +1,7 @@
 From 800c0cc7a91fc93011d3664471a815d0b73cf964 Mon Sep 17 00:00:00 2001
 From: Pankaj Ghosh <g.pankaj@globaledgesoft.com>
 Date: Mon, 1 Feb 2021 11:21:44 +0530
-Subject: [PATCH] Stability check
+Subject: [PATCH] cm2: Stability check fix
 
 Signed-off-by: Pankaj Ghosh <g.pankaj@globaledgesoft.com>
 ---

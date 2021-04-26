@@ -1,7 +1,9 @@
-diff -urN a/src/lib/hostap/src/hapd.c b/src/lib/hostap/src/hapd.c
---- a/src/lib/hostap/src/hapd.c	2021-01-28 19:59:58.152626240 +0530
-+++ b/src/lib/hostap/src/hapd.c	2021-01-28 20:03:27.607333444 +0530
-@@ -637,6 +637,8 @@
+From: aparna.salian <aparna.salian@globaledgesoft.com>
+Subject: [PATCH] lib/hostap: Fetch vif state rrm value from hostapd conf
+
+--- a/src/lib/hostap/src/hapd.c
++++ b/src/lib/hostap/src/hapd.c
+@@ -772,6 +772,8 @@ hapd_bss_get(struct hapd *hapd,
          vstate->ft_psk = atoi(p);
      if ((vstate->btm_exists = (p = ini_geta(conf, "bss_transition"))))
          vstate->btm = atoi(p);
@@ -9,4 +11,4 @@ diff -urN a/src/lib/hostap/src/hapd.c b/src/lib/hostap/src/hapd.c
 +        vstate->rrm = atoi(p);
      if ((p = ini_geta(conf, "multi_ap")))
          SCHEMA_SET_STR(vstate->multi_ap, hapd_map_int2str(atoi(p)));
- 
+     if ((vstate->ssid_broadcast_exists = (p = ini_geta(conf, "ignore_broadcast_ssid"))))

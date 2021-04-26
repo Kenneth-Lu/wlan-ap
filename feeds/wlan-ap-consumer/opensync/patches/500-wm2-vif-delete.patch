@@ -1,7 +1,9 @@
-diff -urN a/src/wm2/src/wm2_radio.c b/src/wm2/src/wm2_radio.c
---- a/src/wm2/src/wm2_radio.c	2021-01-29 15:37:01.078240655 +0530
-+++ b/src/wm2/src/wm2_radio.c	2021-01-29 20:06:10.574842529 +0530
-@@ -780,6 +780,7 @@
+From: aparna.salian <aparna.salian@globaledgesoft.com>
+Subject: [PATCH] wm2: Remove vif state entry for deleted interface
+
+--- a/src/wm2/src/wm2_radio.c
++++ b/src/wm2/src/wm2_radio.c
+@@ -780,6 +780,7 @@ wm2_vconf_recalc(const char *ifname, bool force)
      int num_cconfs;
      bool want;
      bool has;
@@ -9,7 +11,7 @@ diff -urN a/src/wm2/src/wm2_radio.c b/src/wm2/src/wm2_radio.c
  
      LOGD("%s: recalculating", ifname);
  
-@@ -797,6 +798,9 @@
+@@ -797,6 +798,9 @@ wm2_vconf_recalc(const char *ifname, bool force)
                                         &vstate)))
          wm2_vstate_init(&vstate, ifname);
  
@@ -19,7 +21,7 @@ diff -urN a/src/wm2/src/wm2_radio.c b/src/wm2/src/wm2_radio.c
      /* This is workaround to deal with unpatched controller.
       * Having this on device side prevents it from saner 3rd
       * party gw integrations where currently State needs to
-@@ -889,6 +893,13 @@
+@@ -889,6 +893,13 @@ wm2_vconf_recalc(const char *ifname, bool force)
          return;
      }
  

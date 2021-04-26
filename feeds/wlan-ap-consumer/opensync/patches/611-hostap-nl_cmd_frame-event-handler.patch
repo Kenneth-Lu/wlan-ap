@@ -1,7 +1,11 @@
-diff -urN a/src/lib/hostap/inc/opensync-hapd.h b/src/lib/hostap/inc/opensync-hapd.h
---- a/src/lib/hostap/inc/opensync-hapd.h	2021-01-09 23:51:26.533343697 +0530
-+++ b/src/lib/hostap/inc/opensync-hapd.h	2021-01-15 16:22:59.710691101 +0530
-@@ -51,6 +51,10 @@
+From: aparna.salian <aparna.salian@globaledgesoft.com>
+Subject: [PATCH] lib/hostap: Workaround for PROBE_REQ/ASSOC_REQ/REASSOC_REQ events
+
+(requires a patched hostapd)
+
+--- a/src/lib/hostap/inc/opensync-hapd.h
++++ b/src/lib/hostap/inc/opensync-hapd.h
+@@ -51,6 +51,10 @@ struct hapd {
      void (*wps_success)(struct hapd *hapd);
      void (*wps_timeout)(struct hapd *hapd);
      void (*wps_disable)(struct hapd *hapd);
@@ -12,10 +16,9 @@ diff -urN a/src/lib/hostap/inc/opensync-hapd.h b/src/lib/hostap/inc/opensync-hap
      struct ctrl ctrl;
  };
  
-diff -urN a/src/lib/hostap/src/hapd.c b/src/lib/hostap/src/hapd.c
---- a/src/lib/hostap/src/hapd.c	2021-01-09 23:51:26.505344675 +0530
-+++ b/src/lib/hostap/src/hapd.c	2021-01-16 02:26:59.109878008 +0530
-@@ -104,6 +104,7 @@
+--- a/src/lib/hostap/src/hapd.c
++++ b/src/lib/hostap/src/hapd.c
+@@ -104,6 +104,7 @@ hapd_ctrl_cb(struct ctrl *ctrl, int level, const char *buf, size_t len)
      const char *mac;
      const char *k;
      const char *v;
@@ -23,7 +26,7 @@ diff -urN a/src/lib/hostap/src/hapd.c b/src/lib/hostap/src/hapd.c
      char *args = strdupa(buf);
      char *kv;
  
-@@ -115,6 +116,30 @@
+@@ -115,6 +116,30 @@ hapd_ctrl_cb(struct ctrl *ctrl, int level, const char *buf, size_t len)
       */
      event = strsep(&args, " ") ?: "_nope_";
  

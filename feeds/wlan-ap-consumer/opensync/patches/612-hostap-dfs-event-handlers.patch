@@ -1,7 +1,9 @@
-diff -urN a/src/lib/hostap/inc/opensync-hapd.h b/src/lib/hostap/inc/opensync-hapd.h
---- a/src/lib/hostap/inc/opensync-hapd.h	2021-01-26 20:28:21.057564683 +0530
-+++ b/src/lib/hostap/inc/opensync-hapd.h	2021-01-26 20:30:01.223510103 +0530
-@@ -55,6 +55,10 @@
+From: aparna.salian <aparna.salian@globaledgesoft.com>
+Subject: [PATCH] lib/hostap: Callbacks added for hostapd DFS events
+
+--- a/src/lib/hostap/inc/opensync-hapd.h
++++ b/src/lib/hostap/inc/opensync-hapd.h
+@@ -55,6 +55,10 @@ struct hapd {
      void (*cmd_frame_probe_req)(struct hapd *hapd, const char *event);
      void (*cmd_frame_action)(struct hapd *hapd, const char *event);
      void (*cmd_frame_disconnect)(struct hapd *hapd, const char *event);
@@ -12,10 +14,9 @@ diff -urN a/src/lib/hostap/inc/opensync-hapd.h b/src/lib/hostap/inc/opensync-hap
      struct ctrl ctrl;
  };
  
-diff -urN a/src/lib/hostap/src/hapd.c b/src/lib/hostap/src/hapd.c
---- a/src/lib/hostap/src/hapd.c	2021-01-26 20:28:33.249819819 +0530
-+++ b/src/lib/hostap/src/hapd.c	2021-01-26 20:40:37.758631909 +0530
-@@ -214,6 +214,30 @@
+--- a/src/lib/hostap/src/hapd.c
++++ b/src/lib/hostap/src/hapd.c
+@@ -214,6 +214,30 @@ hapd_ctrl_cb(struct ctrl *ctrl, int level, const char *buf, size_t len)
          return;
      }
  

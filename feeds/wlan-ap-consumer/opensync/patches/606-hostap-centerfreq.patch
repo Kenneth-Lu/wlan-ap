@@ -1,17 +1,18 @@
-diff -urN a/src/lib/common/inc/util.h b/src/lib/common/inc/util.h
---- a/src/lib/common/inc/util.h	2021-01-20 01:54:37.838153693 +0530
-+++ b/src/lib/common/inc/util.h	2021-01-20 01:55:28.335153219 +0530
-@@ -141,5 +141,6 @@
+From: aparna.salian <aparna.salian@globaledgesoft.com>
+Subject: [PATCH] lib/hostap: Center frequency fix
+
+--- a/src/lib/common/inc/util.h
++++ b/src/lib/common/inc/util.h
+@@ -141,5 +141,6 @@ int    file_put(const char *path, const char *buf);
  char  *file_get(const char *path);
  #define file_geta(path) strdupafree(file_get(path))
  const int *unii_5g_chan2list(int chan, int width);
 +int unii_5g_centerfreq(const char *ht_mode, const int channel);
  
  #endif /* UTIL_H_INCLUDED */
-diff -urN a/src/lib/common/src/util.c b/src/lib/common/src/util.c
---- a/src/lib/common/src/util.c	2021-01-20 01:13:24.447255624 +0530
-+++ b/src/lib/common/src/util.c	2021-01-20 01:23:48.146366613 +0530
-@@ -1094,3 +1094,21 @@
+--- a/src/lib/common/src/util.c
++++ b/src/lib/common/src/util.c
+@@ -1094,3 +1094,21 @@ const int *unii_5g_chan2list(int chan, int width)
  
      return NULL;
  }
@@ -33,10 +34,9 @@ diff -urN a/src/lib/common/src/util.c b/src/lib/common/src/util.c
 +    }
 +    return sum / cnt;
 +}
-diff -urN a/src/lib/hostap/src/hapd.c b/src/lib/hostap/src/hapd.c
---- a/src/lib/hostap/src/hapd.c	2021-01-19 16:33:41.962168602 +0530
-+++ b/src/lib/hostap/src/hapd.c	2021-01-20 01:52:39.496984864 +0530
-@@ -478,20 +478,12 @@
+--- a/src/lib/hostap/src/hapd.c
++++ b/src/lib/hostap/src/hapd.c
+@@ -479,19 +479,11 @@ hapd_vht_oper_chwidth(const struct schema_Wifi_Radio_Config *rconf)
  static int
  hapd_vht_oper_centr_freq_idx(const struct schema_Wifi_Radio_Config *rconf)
  {
@@ -44,19 +44,19 @@ diff -urN a/src/lib/hostap/src/hapd.c b/src/lib/hostap/src/hapd.c
 -    const int *chans = unii_5g_chan2list(rconf->channel, width);
 -    int sum = 0;
 -    int cnt = 0;
-+    if (!rconf->ht_mode_exists || !rconf->channel_exists)
-+        return 0;
- 
+-
 -    while (*chans) {
 -        sum += *chans;
 -        cnt++;
 -        chans++;
 -    }
 -    return sum / cnt;
-+    return unii_5g_centerfreq(rconf->ht_mode, rconf->channel);
- }
+-}
++    if (!rconf->ht_mode_exists || !rconf->channel_exists)
++        return 0;
  
--
++    return unii_5g_centerfreq(rconf->ht_mode, rconf->channel);
++}
+ 
  int
  hapd_conf_gen(struct hapd *hapd,
-               const struct schema_Wifi_Radio_Config *rconf,

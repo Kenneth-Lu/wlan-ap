@@ -1,7 +1,9 @@
-diff -urN a/src/lib/hostap/src/hapd.c b/src/lib/hostap/src/hapd.c
---- a/src/lib/hostap/src/hapd.c	2021-01-18 23:41:23.538504896 +0530
-+++ b/src/lib/hostap/src/hapd.c	2021-01-18 23:42:54.852904473 +0530
-@@ -850,7 +850,7 @@
+From: aparna.salian <aparna.salian@globaledgesoft.com>
+Subject: [PATCH] lib/hostap: Pass phy name to hostapd while adding a new interface
+
+--- a/src/lib/hostap/src/hapd.c
++++ b/src/lib/hostap/src/hapd.c
+@@ -843,7 +843,7 @@ hapd_sta_iter(struct hapd *hapd,
  static int
  hapd_ctrl_add(struct hapd *hapd)
  {

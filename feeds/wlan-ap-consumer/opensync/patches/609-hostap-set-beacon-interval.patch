@@ -1,7 +1,9 @@
-diff -urN src/lib/hostap/src/hapd.c b/src/lib/hostap/src/hapd.c
---- a/src/lib/hostap/src/hapd.c	2021-02-26 08:33:17.139740109 +0530
-+++ b/src/lib/hostap/src/hapd.c	2021-02-26 08:36:24.676042099 +0530
-@@ -659,6 +659,9 @@
+From: Shubham Pawar <p.shubham@globaledgesoft.com>
+Subject: [PATCH] lib/hostap: Set beacon interval
+
+--- a/src/lib/hostap/src/hapd.c
++++ b/src/lib/hostap/src/hapd.c
+@@ -605,6 +605,9 @@ hapd_conf_gen(struct hapd *hapd,
          csnprintf(&buf, &len, "ieee80211h=1\n");
      }
  
