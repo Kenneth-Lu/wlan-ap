@@ -119,13 +119,10 @@ applyOpenSyncMakefilePatch()
        exit 1
     fi
     cd $ROOT_PATH
-    CFG80211_SEARCH_STR="git@github.com:plume-design/opensync-platform-cfg80211.git"
-    CFG80211_REPLACE_STR="https://github.com/plume-design/opensync-platform-cfg80211.git"
     VENDOR_SEARCH_STR=".*git@github.com:plume-design/opensync-vendor-plume-openwrt.git.*"
     VENDOR_REPLACE_STR="\tgit clone --single-branch --branch $VENDOR_ADTRAN_BRANCH file://$VENDOR_ADTRAN_PATH \$(PKG_BUILD_DIR)/vendor/adtran"
     OPENSYNC_MAKEFILE_PATH="$ROOT_PATH/feeds/wlan-ap-consumer/opensync/Makefile"
 
-    sed -i "s#$CFG80211_SEARCH_STR#$CFG80211_REPLACE_STR#" $OPENSYNC_MAKEFILE_PATH
     sed -i "s#$VENDOR_SEARCH_STR#$VENDOR_REPLACE_STR#" $OPENSYNC_MAKEFILE_PATH
 }
 
@@ -265,7 +262,7 @@ compileOpenwrt()
        echo "$BUILD_DIR Not found exit compilation!!"
        exit 1
     fi
-    make -j4
+    time make -j4
     cd $ROOT_PATH
     echo "Done"
 }
