@@ -1,0 +1,29 @@
+From 1ab830a778c701e586c924aaf799b65a5b3a8814 Mon Sep 17 00:00:00 2001
+From: Janusz Dziedzic <janusz.dziedzic@gmail.com>
+Date: Tue, 6 Mar 2018 11:24:31 +0100
+Subject: [PATCH] Revert "FT: Explicitly check for MDE not present in non-FT
+ association"
+
+This reverts commit 209dad066e5275ac13f52623cc9eaf9b70910123.
+---
+ src/ap/wpa_auth_ie.c | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/src/ap/wpa_auth_ie.c b/src/ap/wpa_auth_ie.c
+index 2ea081b..866a80a 100644
+--- a/src/ap/wpa_auth_ie.c
++++ b/src/ap/wpa_auth_ie.c
+@@ -762,10 +762,6 @@ int wpa_validate_wpa_ie(struct wpa_authenticator *wpa_auth,
+ 				    "MDIE", mdie, MOBILITY_DOMAIN_ID_LEN);
+ 			return WPA_INVALID_MDIE;
+ 		}
+-	} else if (mdie != NULL) {
+-		wpa_printf(MSG_DEBUG,
+-			   "RSN: Trying to use non-FT AKM suite, but MDIE included");
+-		return WPA_INVALID_AKMP;
+ 	}
+ #endif /* CONFIG_IEEE80211R_AP */
+ 
+-- 
+2.9.3
+

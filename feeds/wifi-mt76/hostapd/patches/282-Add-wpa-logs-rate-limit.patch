@@ -1,0 +1,98 @@
+Index: hostapd-2020-06-08-5a8b3662/src/utils/wpa_debug.c
+===================================================================
+--- hostapd-2020-06-08-5a8b3662.orig/src/utils/wpa_debug.c
++++ hostapd-2020-06-08-5a8b3662/src/utils/wpa_debug.c
+@@ -892,3 +892,21 @@ int str_to_debug_level(const char *s)
+ 		return MSG_ERROR;
+ 	return -1;
+ }
++
++
++int wpa_log_rate_limit_can_print(time_t* tstamp)
++{
++    struct timespec cur_tstamp;
++
++    if (clock_gettime(CLOCK_MONOTONIC_RAW, &cur_tstamp) != 0)
++        return 1;
++
++    if (*tstamp > cur_tstamp.tv_sec)
++        return 1;
++
++    if (difftime(cur_tstamp.tv_sec, *tstamp) <= WPA_LOG_DROP_PERIOD)
++        return 0;
++
++    *tstamp = cur_tstamp.tv_sec;
++    return 1;
++}
+Index: hostapd-2020-06-08-5a8b3662/src/utils/wpa_debug.h
+===================================================================
+--- hostapd-2020-06-08-5a8b3662.orig/src/utils/wpa_debug.h
++++ hostapd-2020-06-08-5a8b3662/src/utils/wpa_debug.h
+@@ -11,6 +11,7 @@
+ 
+ #include "wpabuf.h"
+ 
++#include <time.h>
+ extern int wpa_debug_level;
+ extern int wpa_debug_show_keys;
+ extern int wpa_debug_timestamp;
+@@ -37,6 +38,8 @@ enum {
+ #define wpa_debug_close_file() do { } while (0)
+ #define wpa_debug_setup_stdout() do { } while (0)
+ #define wpa_dbg(args...) do { } while (0)
++#define wpa_printf_rate_limit(args...) do { } while (0)
++#define wpa_dbg_rate_limit(args...) do { } while (0)
+ 
+ static inline int wpa_debug_reopen_file(void)
+ {
+@@ -156,6 +159,37 @@ void wpa_hexdump_ascii_key(int level, co
+  */
+ #define wpa_dbg(args...) wpa_msg(args)
+ 
++int wpa_log_rate_limit_can_print(time_t* tstamp);
++
++#define WPA_LOG_DROP_PERIOD 20 /* seconds */
++
++#define wpa_printf_rate_limit(args...)                            \
++    ({                                                            \
++        const unsigned int line_num = __LINE__ - 2;               \
++        static time_t tstamp = 0;                                 \
++        static int print_skipped_log = 1;                         \
++        if (wpa_log_rate_limit_can_print(&tstamp)) {              \
++             wpa_printf(args);                                    \
++             print_skipped_log = 1;                               \
++        }                                                         \
++        else {                                                    \
++            if (print_skipped_log) {                              \
++                print_skipped_log = 0;                            \
++                wpa_printf(MSG_DEBUG,                             \
++                    "Log at %s:%d were dropped by rate limiter",  \
++                    __FILE__, line_num);                          \
++            }                                                     \
++        }                                                         \
++    })
++
++#define wpa_dbg_rate_limit(args...)                  \
++    ({                                               \
++        static time_t tstamp = 0;                    \
++        if (wpa_log_rate_limit_can_print(&tstamp))   \
++             wpa_dbg(args);                          \
++    })
++
++
+ #endif /* CONFIG_NO_STDOUT_DEBUG */
+ 
+ 
+Index: hostapd-2020-06-08-5a8b3662/src/ap/drv_callbacks.c
+===================================================================
+--- hostapd-2020-06-08-5a8b3662.orig/src/ap/drv_callbacks.c
++++ hostapd-2020-06-08-5a8b3662/src/ap/drv_callbacks.c
+@@ -1811,7 +1811,7 @@ void hostapd_wpa_event(void *ctx, enum w
+ 			level = MSG_EXCESSIVE;
+ 	}
+ 
+-	wpa_dbg(hapd->msg_ctx, level, "Event %s (%d) received",
++	wpa_dbg_rate_limit(hapd->msg_ctx, level, "Event %s (%d) received",
+ 		event_to_string(event), event);
+ #endif /* CONFIG_NO_STDOUT_DEBUG */
+ 
