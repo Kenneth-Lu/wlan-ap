@@ -1,0 +1,29 @@
+---
+description: wifi support for SmartRG 834-5 
+feeds:
+  - name: wifi
+    path: ../../feeds/wifi-mt76xx
+packages:
+  - batctl-default
+  - kmod-lib-cordic
+  - kmod-hwmon-core
+  - bash
+  - iwcap
+  - sgdisk
+  - lsblk
+  - gdisk
+  - fdisk
+  - usbutils
+  - file
+  - ethtool
+  - tcpdump
+diffconfig: |
+  CONFIG_TARGET_PROFILE="DEVICE_bpi_bananapi-r64"
+  CONFIG_TARGET_mediatek_mt7622_DEVICE_bpi_bananapi-r64=y
+  CONFIG_DEVEL=y
+  CONFIG_BUILD_LOG=y
+  CONFIG_NEED_TOOLCHAIN=y
+  CONFIG_MODULES=y
+  CONFIG_BUSYBOX_CONFIG_USLEEP=y
+  CONFIG_PACKAGE_libcap=y
+  CONFIG_OPENSYNC_TARGET="834-5"

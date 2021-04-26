@@ -1,0 +1,7 @@
+repo: https://github.com/openwrt/openwrt.git
+branch: bpir64Dev 
+revision: ec6293febc244d187e71a6e54f44920be679cde4
+output_dir: ./output
+
+patch_folders:
+  - patchesOwrt21_02/

@@ -1,0 +1,26 @@
+---
+description: wifi support for SmartRG SR400ac
+feeds:
+  - name: wifi
+    path: ../../feeds/wifi-bcm53xx
+packages:
+  - brcmfmac-firmware-43602a1-pcie
+  - kmod-batman-adv
+  - batctl-default
+  - kmod-lib-cordic
+  - kmod-hwmon-core
+diffconfig: |
+  CONFIG_TARGET_PROFILE="DEVICE_smartrg-sr400ac"
+  CONFIG_TARGET_bcm53xx_DEVICE_smartrg-sr400ac=y
+  CONFIG_DEVEL=y
+  CONFIG_BUILD_LOG=y
+  CONFIG_NEED_TOOLCHAIN=y
+  # CONFIG_PACKAGE_kmod-phy-bcm-ns-usb2 is not set
+  # CONFIG_PACKAGE_kmod-phy-bcm-ns-usb3 is not set
+  # CONFIG_PACKAGE_kmod-usb-ledtrig-usbport is not set
+  # CONFIG_PACKAGE_kmod-usb-ohci is not set
+  # CONFIG_PACKAGE_kmod-usb2 is not set
+  # CONFIG_PACKAGE_kmod-usb3 is not set
+  CONFIG_OPENSYNC_TARGET="SR400ac"
+  CONFIG_PACKAGE_BRCM80211_DEBUG=y
+  CONFIG_BUSYBOX_CONFIG_USLEEP=y

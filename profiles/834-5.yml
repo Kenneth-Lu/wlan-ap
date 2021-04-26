@@ -1,0 +1,5 @@
+---
+profile: DEVICE_bananapi_bpi-r64
+target: mediatek
+subtarget: mt7622
+description: Build image for the SmartRG 834_5

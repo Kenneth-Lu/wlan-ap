@@ -1,0 +1,5 @@
+---
+profile: smartrg-sr400ac
+target: bcm53xx
+subtarget: generic
+description: Build image for the SmartRG SR400ac
