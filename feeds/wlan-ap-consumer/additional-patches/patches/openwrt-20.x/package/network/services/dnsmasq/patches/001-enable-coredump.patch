@@ -1,0 +1,18 @@
+We heavily rely on logpull or remote environment for issue debugging.
+Coredump always helps a lot for any user space APP crash issue.
+Enable dnsmasq coredump by default
+
+JIRA: SIT-433
+
+--- a/src/dnsmasq.c
++++ b/src/dnsmasq.c
+@@ -669,8 +669,7 @@ int main (int argc, char **argv)
+ #ifdef HAVE_LINUX_NETWORK
+   free(hdr);
+   free(data);
+-  if (option_bool(OPT_DEBUG)) 
+-    prctl(PR_SET_DUMPABLE, 1, 0, 0, 0);
++  prctl(PR_SET_DUMPABLE, 1, 0, 0, 0);
+ #endif
+ 
+ #ifdef HAVE_TFTP

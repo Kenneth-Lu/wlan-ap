@@ -1,0 +1,41 @@
+--- a/sysklogd/klogd.c
++++ b/sysklogd/klogd.c
+@@ -89,11 +89,13 @@ static int klogd_read(char *bufp, int le
+ }
+ # define READ_ERROR "klogctl(2) error"
+ 
+-static void klogd_close(void)
++static void klogd_close(int lvl)
+ {
+ 	/* FYI: cmd 7 is equivalent to setting console_loglevel to 7
+ 	 * via klogctl(8, NULL, 7). */
+-	klogctl(7, NULL, 0); /* "7 -- Enable printk's to console" */
++	if (lvl)
++		klogctl(7, NULL, 0); /* "7 -- Enable printk's to console" */
++
+ 	klogctl(0, NULL, 0); /* "0 -- Close the log. Currently a NOP" */
+ }
+ 
+@@ -137,9 +139,11 @@ static int klogd_read(char *bufp, int le
+ }
+ # define READ_ERROR "read error"
+ 
+-static void klogd_close(void)
++static void klogd_close(int lvl)
+ {
+-	klogd_setloglevel(7);
++	if (lvl)
++		klogd_setloglevel(7);
++
+ 	if (ENABLE_FEATURE_CLEAN_UP)
+ 		close(klogfd);
+ }
+@@ -290,7 +294,7 @@ int klogd_main(int argc UNUSED_PARAM, ch
+ 		}
+ 	}
+ 
+-	klogd_close();
++	klogd_close(i);
+ 	syslog(LOG_NOTICE, "klogd: exiting");
+ 	remove_pidfile(CONFIG_PID_FILE_PATH "/klogd.pid");
+ 	if (bb_got_signal)

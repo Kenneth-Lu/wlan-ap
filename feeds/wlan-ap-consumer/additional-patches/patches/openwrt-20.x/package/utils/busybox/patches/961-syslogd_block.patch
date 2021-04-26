@@ -1,0 +1,18 @@
+--- a/sysklogd/syslogd.c
++++ b/sysklogd/syslogd.c
+@@ -712,7 +712,14 @@ static void log_locally(time_t now, char
+ 		} else {
+  reopen:
+ 			log_file->fd = open(log_file->path, O_WRONLY | O_CREAT
+-					| O_NOCTTY | O_APPEND | O_NONBLOCK,
++					| O_NOCTTY | O_APPEND,
++#if 0
++					/*
++					 * O_NONBLOCK causes to lose syslog messages during bursts when logging
++					 * to filesystems.
++					 */
++					| O_NONBLOCK,
++#endif
+ 					0666);
+ 			if (log_file->fd < 0) {
+ 				/* cannot open logfile? - print to /dev/console then */

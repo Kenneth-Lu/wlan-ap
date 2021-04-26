@@ -1,0 +1,50 @@
+--- a/networking/udhcp/dhcpc.c
++++ b/networking/udhcp/dhcpc.c
+@@ -76,6 +76,7 @@ static const char udhcpc_longopts[] ALIG
+ 	"background\0"     No_argument       "b"
+ 	)
+ 	"broadcast\0"      No_argument       "B"
++	"no-dhcp-req\0"    No_argument       "Q"
+ 	IF_FEATURE_UDHCPC_ARPING("arping\0"	Optional_argument "a")
+ 	IF_FEATURE_UDHCP_PORT("client-port\0"	Required_argument "P")
+ 	;
+@@ -108,9 +109,11 @@ enum {
+ 	USE_FOR_MMU(             OPTBIT_b,)
+ 	IF_FEATURE_UDHCPC_ARPING(OPTBIT_a,)
+ 	IF_FEATURE_UDHCP_PORT(   OPTBIT_P,)
++	OPTBIT_Q,
+ 	USE_FOR_MMU(             OPT_b = 1 << OPTBIT_b,)
+ 	IF_FEATURE_UDHCPC_ARPING(OPT_a = 1 << OPTBIT_a,)
+ 	IF_FEATURE_UDHCP_PORT(   OPT_P = 1 << OPTBIT_P,)
++	OPT_Q = 1 << OPTBIT_Q,
+ };
+ 
+ 
+@@ -1228,6 +1231,7 @@ static void client_background(void)
+ //usage:     "\n	-F NAME		Ask server to update DNS mapping for NAME"
+ //usage:     "\n	-V VENDOR	Vendor identifier (default 'udhcp VERSION')"
+ //usage:     "\n	-C		Don't send MAC as client identifier"
++//usage:     "\n	-Q		Exit after receiving DHCP offer, i.e. don't send DHCP request"
+ //usage:	IF_UDHCP_VERBOSE(
+ //usage:     "\n	-v		Verbose"
+ //usage:	)
+@@ -1275,6 +1279,7 @@ int udhcpc_main(int argc UNUSED_PARAM, c
+ 		USE_FOR_MMU("b")
+ 		IF_FEATURE_UDHCPC_ARPING("a::")
+ 		IF_FEATURE_UDHCP_PORT("P:")
++		"Q"
+ 		"v"
+ 		"\0" IF_UDHCP_VERBOSE("vv") /* -v is a counter */
+ 		, udhcpc_longopts
+@@ -1715,6 +1720,11 @@ int udhcpc_main(int argc UNUSED_PARAM, c
+ 				timeout = 0;
+ 				packet_num = 0;
+ 				already_waited_sec = 0;
++				if (opt & OPT_Q) {
++					retval = 0;
++					bb_error_msg("DHCP offer received, exit");
++					goto ret;
++				}
+ 			}
+ 			continue;
+ 		case REQUESTING:
