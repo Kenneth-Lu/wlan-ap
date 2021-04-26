@@ -1,0 +1,160 @@
+Index: mt76-2020-09-23-b22977c2/mt7915/debugfs.c
+===================================================================
+--- mt76-2020-09-23-b22977c2.orig/mt7915/debugfs.c
++++ mt76-2020-09-23-b22977c2/mt7915/debugfs.c
+@@ -235,18 +235,6 @@ static const struct file_operations fops
+ 	.release = single_release,
+ };
+ 
+-static int mt7915_read_temperature(struct seq_file *s, void *data)
+-{
+-	struct mt7915_dev *dev = dev_get_drvdata(s->private);
+-	int temp;
+-
+-	/* cpu */
+-	temp = mt7915_mcu_get_temperature(dev, 0);
+-	seq_printf(s, "Temperature: %d\n", temp);
+-
+-	return 0;
+-}
+-
+ static int
+ mt7915_queues_acq(struct seq_file *s, void *data)
+ {
+@@ -396,8 +384,7 @@ int mt7915_init_debugfs(struct mt7915_de
+ 	debugfs_create_file("radar_trigger", 0200, dir, dev,
+ 			    &fops_radar_trigger);
+ 	debugfs_create_file("ser_trigger", 0200, dir, dev, &fops_ser_trigger);
+-	debugfs_create_devm_seqfile(dev->mt76.dev, "temperature", dir,
+-				    mt7915_read_temperature);
++
+ 	debugfs_create_devm_seqfile(dev->mt76.dev, "txpower_sku", dir,
+ 				    mt7915_read_rate_txpower);
+ 
+Index: mt76-2020-09-23-b22977c2/mt7915/init.c
+===================================================================
+--- mt76-2020-09-23-b22977c2.orig/mt7915/init.c
++++ mt76-2020-09-23-b22977c2/mt7915/init.c
+@@ -2,6 +2,8 @@
+ /* Copyright (C) 2020 MediaTek Inc. */
+ 
+ #include <linux/etherdevice.h>
++#include <linux/hwmon.h>
++#include <linux/hwmon-sysfs.h>
+ #include "mt7915.h"
+ #include "mac.h"
+ #include "eeprom.h"
+@@ -76,6 +78,53 @@ static int mt7915_txbf_init(struct mt791
+ 	return mt7915_mcu_set_txbf_type(dev);
+ }
+ 
++static ssize_t mt7915_thermal_show_temp(struct device *dev,
++					struct device_attribute *attr,
++					char *buf)
++{
++	struct mt7915_phy *phy = dev_get_drvdata(dev);
++	int temperature;
++
++	mutex_lock(&phy->dev->mt76.mutex);
++	temperature = mt7915_mcu_get_temperature(phy);
++	mutex_unlock(&phy->dev->mt76.mutex);
++
++	if (temperature < 0)
++		return temperature;
++
++	/* display in millidegree celcius */
++	return sprintf(buf, "%u\n", temperature * 1000);
++}
++
++static SENSOR_DEVICE_ATTR(temp1_input, 0444, mt7915_thermal_show_temp,
++			  NULL, 0);
++
++static struct attribute *mt7915_hwmon_attrs[] = {
++	&sensor_dev_attr_temp1_input.dev_attr.attr,
++	NULL,
++};
++ATTRIBUTE_GROUPS(mt7915_hwmon);
++
++static int mt7915_thermal_init(struct mt7915_phy *phy)
++{
++	struct wiphy *wiphy = phy->mt76->hw->wiphy;
++	struct device *hwmon;
++
++	/* TODO: add cooling device for throttling */
++
++	if (!IS_REACHABLE(CONFIG_HWMON))
++		return 0;
++
++	hwmon = devm_hwmon_device_register_with_groups(&wiphy->dev,
++						       wiphy_name(wiphy), phy,
++						       mt7915_hwmon_groups);
++	if (IS_ERR(hwmon))
++		return PTR_ERR(hwmon);
++
++	return 0;
++}
++
++
+ static void
+ mt7915_init_txpower(struct mt7915_dev *dev,
+ 		    struct ieee80211_supported_band *sband)
+@@ -642,6 +691,10 @@ int mt7915_register_ext_phy(struct mt791
+ 	if (ret)
+ 		ieee80211_free_hw(mphy->hw);
+ 
++	ret = mt7915_thermal_init(phy);
++	if (ret)
++		ieee80211_free_hw(mphy->hw);
++
+ 	return ret;
+ }
+ 
+@@ -698,6 +751,10 @@ int mt7915_register_device(struct mt7915
+ 	if (ret)
+ 		return ret;
+ 
++	ret = mt7915_thermal_init(&dev->phy);
++	if (ret)
++		return ret;
++
+ 	ieee80211_queue_work(mt76_hw(dev), &dev->init_work);
+ 
+ 	return mt7915_init_debugfs(dev);
+Index: mt76-2020-09-23-b22977c2/mt7915/mcu.c
+===================================================================
+--- mt76-2020-09-23-b22977c2.orig/mt7915/mcu.c
++++ mt76-2020-09-23-b22977c2/mt7915/mcu.c
+@@ -3257,16 +3257,17 @@ int mt7915_mcu_get_eeprom(struct mt7915_
+ 				   sizeof(req), true);
+ }
+ 
+-int mt7915_mcu_get_temperature(struct mt7915_dev *dev, int index)
++int mt7915_mcu_get_temperature(struct mt7915_phy *phy)
+ {
++	struct mt7915_dev *dev = phy->dev;
+ 	struct {
+ 		u8 ctrl_id;
+ 		u8 action;
+-		u8 band;
++		u8 dbdc_idx;
+ 		u8 rsv[5];
+ 	} req = {
+ 		.ctrl_id = THERMAL_SENSOR_TEMP_QUERY,
+-		.action = index,
++		.dbdc_idx = phy != &dev->phy,
+ 	};
+ 
+ 	return __mt76_mcu_send_msg(&dev->mt76, MCU_EXT_CMD_THERMAL_CTRL, &req,
+Index: mt76-2020-09-23-b22977c2/mt7915/mt7915.h
+===================================================================
+--- mt76-2020-09-23-b22977c2.orig/mt7915/mt7915.h
++++ mt76-2020-09-23-b22977c2/mt7915/mt7915.h
+@@ -325,7 +325,7 @@ int mt7915_mcu_set_pulse_th(struct mt791
+ int mt7915_mcu_set_radar_th(struct mt7915_dev *dev, int index,
+ 			    const struct mt7915_dfs_pattern *pattern);
+ int mt7915_mcu_get_rate_info(struct mt7915_dev *dev, u32 cmd, u16 wlan_idx);
+-int mt7915_mcu_get_temperature(struct mt7915_dev *dev, int index);
++int mt7915_mcu_get_temperature(struct mt7915_phy *phy);
+ int mt7915_mcu_rdd_cmd(struct mt7915_dev *dev, enum mt7915_rdd_cmd cmd,
+ 		       u8 index, u8 rx_sel, u8 val);
+ int mt7915_mcu_fw_log_2_host(struct mt7915_dev *dev, u8 ctrl);
