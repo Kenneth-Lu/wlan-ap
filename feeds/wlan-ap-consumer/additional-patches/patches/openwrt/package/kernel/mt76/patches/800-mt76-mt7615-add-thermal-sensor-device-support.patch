@@ -1,0 +1,159 @@
+Index: mt76-2021-03-26-b8609066/mt7615/debugfs.c
+===================================================================
+--- mt76-2021-03-26-b8609066.orig/mt7615/debugfs.c
++++ mt76-2021-03-26-b8609066/mt7615/debugfs.c
+@@ -291,23 +291,6 @@ mt7615_radio_read(struct seq_file *s, vo
+ 	return 0;
+ }
+ 
+-static int mt7615_read_temperature(struct seq_file *s, void *data)
+-{
+-	struct mt7615_dev *dev = dev_get_drvdata(s->private);
+-	int temp;
+-
+-	if (!mt7615_wait_for_mcu_init(dev))
+-		return 0;
+-
+-	/* cpu */
+-	mt7615_mutex_acquire(dev);
+-	temp = mt7615_mcu_get_temperature(dev, 0);
+-	mt7615_mutex_release(dev);
+-
+-	seq_printf(s, "Temperature: %d\n", temp);
+-
+-	return 0;
+-}
+ 
+ static int
+ mt7615_queues_acq(struct seq_file *s, void *data)
+@@ -536,8 +519,7 @@ int mt7615_init_debugfs(struct mt7615_de
+ 
+ 	debugfs_create_file("reset_test", 0200, dir, dev,
+ 			    &fops_reset_test);
+-	debugfs_create_devm_seqfile(dev->mt76.dev, "temperature", dir,
+-				    mt7615_read_temperature);
++
+ 	debugfs_create_file("ext_mac_addr", 0600, dir, dev, &fops_ext_mac_addr);
+ 
+ 	debugfs_create_u32("rf_wfidx", 0600, dir, &dev->debugfs_rf_wf);
+Index: mt76-2021-03-26-b8609066/mt7615/init.c
+===================================================================
+--- mt76-2021-03-26-b8609066.orig/mt7615/init.c
++++ mt76-2021-03-26-b8609066/mt7615/init.c
+@@ -8,10 +8,59 @@
+  */
+ 
+ #include <linux/etherdevice.h>
++#include <linux/hwmon.h>
++#include <linux/hwmon-sysfs.h>
+ #include "mt7615.h"
+ #include "mac.h"
+ #include "mcu.h"
+ #include "eeprom.h"
++static ssize_t mt7615_thermal_show_temp(struct device *dev,
++					struct device_attribute *attr,
++					char *buf)
++{
++	struct mt7615_dev *mdev = dev_get_drvdata(dev);
++	int temperature;
++
++	if (!mt7615_wait_for_mcu_init(mdev))
++		return 0;
++
++	mt7615_mutex_acquire(mdev);
++	temperature = mt7615_mcu_get_temperature(mdev);
++	mt7615_mutex_release(mdev);
++
++	if (temperature < 0)
++		return temperature;
++
++	/* display in millidegree celcius */
++	return sprintf(buf, "%u\n", temperature * 1000);
++}
++
++static SENSOR_DEVICE_ATTR(temp1_input, 0444, mt7615_thermal_show_temp,
++			  NULL, 0);
++
++static struct attribute *mt7615_hwmon_attrs[] = {
++	&sensor_dev_attr_temp1_input.dev_attr.attr,
++	NULL,
++};
++ATTRIBUTE_GROUPS(mt7615_hwmon);
++
++int mt7615_thermal_init(struct mt7615_dev *dev)
++{
++	struct wiphy *wiphy = mt76_hw(dev)->wiphy;
++	struct device *hwmon;
++
++	if (!IS_REACHABLE(CONFIG_HWMON))
++		return 0;
++
++	hwmon = devm_hwmon_device_register_with_groups(&wiphy->dev,
++						       wiphy_name(wiphy), dev,
++						       mt7615_hwmon_groups);
++	if (IS_ERR(hwmon))
++		return PTR_ERR(hwmon);
++
++	return 0;
++}
++EXPORT_SYMBOL_GPL(mt7615_thermal_init);
+ 
+ static void
+ mt7615_phy_init(struct mt7615_dev *dev)
+Index: mt76-2021-03-26-b8609066/mt7615/mcu.c
+===================================================================
+--- mt76-2021-03-26-b8609066.orig/mt7615/mcu.c
++++ mt76-2021-03-26-b8609066/mt7615/mcu.c
+@@ -2276,14 +2276,12 @@ int mt7615_mcu_set_chan_info(struct mt76
+ 	return mt76_mcu_send_msg(&dev->mt76, cmd, &req, sizeof(req), true);
+ }
+ 
+-int mt7615_mcu_get_temperature(struct mt7615_dev *dev, int index)
++int mt7615_mcu_get_temperature(struct mt7615_dev *dev)
+ {
+ 	struct {
+ 		u8 action;
+ 		u8 rsv[3];
+-	} req = {
+-		.action = index,
+-	};
++	} req = {};
+ 
+ 	return mt76_mcu_send_msg(&dev->mt76, MCU_EXT_CMD_GET_TEMP, &req,
+ 				 sizeof(req), true);
+Index: mt76-2021-03-26-b8609066/mt7615/mt7615.h
+===================================================================
+--- mt76-2021-03-26-b8609066.orig/mt7615/mt7615.h
++++ mt76-2021-03-26-b8609066/mt7615/mt7615.h
+@@ -359,6 +359,7 @@ static inline int mt7622_wmac_init(struc
+ }
+ #endif
+ 
++int mt7615_thermal_init(struct mt7615_dev *dev);
+ int mt7615_mmio_probe(struct device *pdev, void __iomem *mem_base,
+ 		      int irq, const u32 *map);
+ u32 mt7615_reg_map(struct mt7615_dev *dev, u32 addr);
+@@ -497,7 +498,7 @@ u32 mt7615_rf_rr(struct mt7615_dev *dev,
+ int mt7615_rf_wr(struct mt7615_dev *dev, u32 wf, u32 reg, u32 val);
+ int mt7615_mcu_set_dbdc(struct mt7615_dev *dev);
+ int mt7615_mcu_set_eeprom(struct mt7615_dev *dev);
+-int mt7615_mcu_get_temperature(struct mt7615_dev *dev, int index);
++int mt7615_mcu_get_temperature(struct mt7615_dev *dev);
+ int mt7615_mcu_set_tx_power(struct mt7615_phy *phy);
+ void mt7615_mcu_exit(struct mt7615_dev *dev);
+ void mt7615_mcu_fill_msg(struct mt7615_dev *dev, struct sk_buff *skb,
+Index: mt76-2021-03-26-b8609066/mt7615/pci_init.c
+===================================================================
+--- mt76-2021-03-26-b8609066.orig/mt7615/pci_init.c
++++ mt76-2021-03-26-b8609066/mt7615/pci_init.c
+@@ -147,6 +147,10 @@ int mt7615_register_device(struct mt7615
+ 	if (ret)
+ 		return ret;
+ 
++	ret = mt7615_thermal_init(dev);
++	if (ret)
++		return ret;
++
+ 	ieee80211_queue_work(mt76_hw(dev), &dev->mcu_work);
+ 	mt7615_init_txpower(dev, &dev->mphy.sband_2g.sband);
+ 	mt7615_init_txpower(dev, &dev->mphy.sband_5g.sband);
