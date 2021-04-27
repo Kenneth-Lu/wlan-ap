@@ -1,0 +1,95 @@
+Index: odhcp6c-2020-03-28-f575351c/src/dhcpv6.c
+===================================================================
+--- odhcp6c-2020-03-28-f575351c.orig/src/dhcpv6.c
++++ odhcp6c-2020-03-28-f575351c/src/dhcpv6.c
+@@ -237,6 +237,8 @@ enum {
+ 	IOV_ORO,
+ 	IOV_CL_ID,
+ 	IOV_SRV_ID,
++	IOV_VENDOR_SPECIFIC_HDR,
++	IOV_VENDOR_SPECIFIC,
+ 	IOV_OPTS,
+ 	IOV_RECONF_ACCEPT,
+ 	IOV_FQDN,
+@@ -465,6 +467,15 @@ static void dhcpv6_send(enum dhcpv6_msg
+ 	}
+ 	oro_len *= sizeof(*oro);
+ 
++	// Build vendor-specific option
++	size_t vendor_specific_len;
++	struct dhcpv6_vendorspecific *vendor_specific = odhcp6c_get_state(STATE_VENDORSPECIFIC, &vendor_specific_len);
++
++	struct {
++		uint16_t type;
++		uint16_t length;
++	} vendor_specific_hdr = {htons(DHCPV6_OPT_VENDOR_SPECIFIC), htons(vendor_specific_len)};
++
+ 	// Prepare Header
+ 	struct {
+ 		uint8_t type;
+@@ -486,6 +497,8 @@ static void dhcpv6_send(enum dhcpv6_msg
+ 		[IOV_ORO] = {oro, oro_len},
+ 		[IOV_CL_ID] = {cl_id, cl_id_len},
+ 		[IOV_SRV_ID] = {srv_id, srv_id_len},
++		[IOV_VENDOR_SPECIFIC_HDR] = {&vendor_specific_hdr, vendor_specific_len ? sizeof(vendor_specific_hdr) :     0},
++		[IOV_VENDOR_SPECIFIC] = {vendor_specific, vendor_specific_len},
+ 		[IOV_OPTS] = { opts, opts_len },
+ 		[IOV_RECONF_ACCEPT] = {&reconf_accept, sizeof(reconf_accept)},
+ 		[IOV_FQDN] = {&fqdn, fqdn_len},
+Index: odhcp6c-2020-03-28-f575351c/src/odhcp6c.c
+===================================================================
+--- odhcp6c-2020-03-28-f575351c.orig/src/odhcp6c.c
++++ odhcp6c-2020-03-28-f575351c/src/odhcp6c.c
+@@ -186,7 +186,7 @@ int main(_unused int argc, char* const a
+ 	unsigned int ra_options = RA_RDNSS_DEFAULT_LIFETIME;
+ 	unsigned int ra_holdoff_interval = RA_MIN_ADV_INTERVAL;
+ 
+-	while ((c = getopt(argc, argv, "S::N:V:P:FB:c:i:r:Ru:Ux:s:kt:m:Lhedp:fav")) != -1) {
++	while ((c = getopt(argc, argv, "S::N:V:X:P:FB:c:i:r:Ru:Ux:s:kt:m:Lhedp:fav")) != -1) {
+ 		switch (c) {
+ 		case 'S':
+ 			allow_slaac_only = (optarg) ? atoi(optarg) : -1;
+@@ -228,6 +228,15 @@ int main(_unused int argc, char* const a
+ 			free(o_data);
+ 			break;
+ 
++		case 'X':
++			l = script_unhexlify(buf, sizeof(buf), optarg);
++			if (!l)
++				help=true;
++
++			odhcp6c_add_state(STATE_VENDORSPECIFIC, buf, l);
++
++			break;
++
+ 		case 'P':
+ 			if (ia_pd_mode == IA_MODE_NONE)
+ 				ia_pd_mode = IA_MODE_TRY;
+@@ -606,6 +615,7 @@ static int usage(void)
+ 	"	-P <length>	Request IPv6-Prefix (0 = auto)\n"
+ 	"	-F		Force IPv6-Prefix\n"
+ 	"	-V <class>	Set vendor-class option (base-16 encoded)\n"
++	"       -X <options>    Set vendor-specific option (base-16 encoded)\n"
+ 	"	-u <user-class> Set user-class option string\n"
+ 	"	-x <opt>:<val>	Add option opt (with value val) in sent packets (cumulative)\n"
+ 	"			Examples of IPv6 address, string and base-16 encoded options:\n"
+Index: odhcp6c-2020-03-28-f575351c/src/odhcp6c.h
+===================================================================
+--- odhcp6c-2020-03-28-f575351c.orig/src/odhcp6c.h
++++ odhcp6c-2020-03-28-f575351c/src/odhcp6c.h
+@@ -51,6 +51,7 @@ enum dhcvp6_opt {
+ 	DHCPV6_OPT_RAPID_COMMIT = 14,
+ 	DHCPV6_OPT_USER_CLASS = 15,
+ 	DHCPV6_OPT_VENDOR_CLASS = 16,
++	DHCPV6_OPT_VENDOR_SPECIFIC = 17,
+ 	DHCPV6_OPT_INTERFACE_ID = 18,
+ 	DHCPV6_OPT_RECONF_MESSAGE = 19,
+ 	DHCPV6_OPT_RECONF_ACCEPT = 20,
+@@ -310,6 +311,7 @@ enum odhcp6c_state {
+ 	STATE_RA_DNS,
+ 	STATE_RA_SEARCH,
+ 	STATE_AFTR_NAME,
++	STATE_VENDORSPECIFIC,
+ 	STATE_OPTS,
+ 	STATE_CER,
+ 	STATE_S46_MAPT,
