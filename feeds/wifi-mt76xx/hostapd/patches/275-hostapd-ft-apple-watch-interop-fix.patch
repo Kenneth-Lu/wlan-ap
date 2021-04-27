@@ -1,0 +1,23 @@
+Apple watch get wifi network setting from iPhone (master device).
+Next request FT-PSK, don't add MDIE/FTIE.
+This patch workaround this problem, force to use
+MGMT_PSK.
+
+
+diff --git a/src/ap/wpa_auth_ie.c b/src/ap/wpa_auth_ie.c
+index 0e36d26..4b39b55 100755
+--- a/src/ap/wpa_auth_ie.c
++++ b/src/ap/wpa_auth_ie.c
+@@ -533,6 +533,12 @@ int wpa_validate_wpa_ie(struct wpa_authenticator *wpa_auth,
+ 			data.key_mgmt &= ~WPA_KEY_MGMT_FT;
+ 		}
+ 
++		if (wpa_key_mgmt_ft(data.key_mgmt) && !mdie)
++		{
++			wpa_printf(MSG_DEBUG, "RSN: FT set in AKM but MDIE is missing, choose PSK");
++			data.key_mgmt = WPA_KEY_MGMT_PSK;
++		}
++
+ 		selector = RSN_AUTH_KEY_MGMT_UNSPEC_802_1X;
+ 		if (0) {
+ 		}

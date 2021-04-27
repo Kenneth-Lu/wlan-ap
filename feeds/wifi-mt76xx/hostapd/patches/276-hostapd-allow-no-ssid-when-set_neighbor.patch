@@ -1,0 +1,61 @@
+Index: hostapd-2020-06-08-5a8b3662/hostapd/ctrl_iface.c
+===================================================================
+--- hostapd-2020-06-08-5a8b3662.orig/hostapd/ctrl_iface.c
++++ hostapd-2020-06-08-5a8b3662/hostapd/ctrl_iface.c
+@@ -3019,14 +3019,19 @@ static int hostapd_ctrl_iface_set_neighb
+ 	}
+ 
+ 	tmp = os_strstr(buf, "ssid=");
+-	if (!tmp || ssid_parse(tmp + 5, &ssid)) {
+-		wpa_printf(MSG_ERROR,
+-			   "CTRL: SET_NEIGHBOR: Bad or missing SSID");
+-		return -1;
++	if (!tmp) {
++		ssid.ssid_len = hapd->conf->ssid.ssid_len;
++		os_memcpy(ssid.ssid, hapd->conf->ssid.ssid, ssid.ssid_len);
++	} else {
++		if (ssid_parse(tmp + 5, &ssid)) {
++			wpa_printf(MSG_ERROR,
++					"CTRL: SET_NEIGHBOR: Bad SSID");
++			return -1;
++		}
++		buf = os_strchr(tmp + 6, tmp[5] == '"' ? '"' : ' ');
++		if (!buf)
++			return -1;
+ 	}
+-	buf = os_strchr(tmp + 6, tmp[5] == '"' ? '"' : ' ');
+-	if (!buf)
+-		return -1;
+ 
+ 	tmp = os_strstr(buf, "nr=");
+ 	if (!tmp) {
+@@ -3120,6 +3125,9 @@ static int hostapd_ctrl_iface_remove_nei
+ 				   "CTRL: REMOVE_NEIGHBOR: Bad SSID");
+ 			return -1;
+ 		}
++	} else {
++		ssid.ssid_len = hapd->conf->ssid.ssid_len;
++		os_memcpy(ssid.ssid, hapd->conf->ssid.ssid, ssid.ssid_len);
+ 	}
+ 
+ 	return hostapd_neighbor_remove(hapd, bssid, ssidp);
+Index: hostapd-2020-06-08-5a8b3662/hostapd/hostapd_cli.c
+===================================================================
+--- hostapd-2020-06-08-5a8b3662.orig/hostapd/hostapd_cli.c
++++ hostapd-2020-06-08-5a8b3662/hostapd/hostapd_cli.c
+@@ -1296,13 +1296,13 @@ static int hostapd_cli_cmd_set_neighbor(
+ 	char cmd[2048];
+ 	int res;
+ 
+-	if (argc < 3 || argc > 6) {
++	if (argc < 2 || argc > 6) {
+ 		printf("Invalid set_neighbor command: needs 3-6 arguments\n");
+ 		return -1;
+ 	}
+ 
+ 	res = os_snprintf(cmd, sizeof(cmd), "SET_NEIGHBOR %s %s %s %s %s %s",
+-			  argv[0], argv[1], argv[2], argc >= 4 ? argv[3] : "",
++			  argv[0], argv[1], argc >=3 ? argv[2] : "", argc >= 4 ? argv[3] : "",
+ 			  argc >= 5 ? argv[4] : "", argc == 6 ? argv[5] : "");
+ 	if (os_snprintf_error(sizeof(cmd), res)) {
+ 		printf("Too long SET_NEIGHBOR command.\n");

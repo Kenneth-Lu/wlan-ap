@@ -1,0 +1,99 @@
+Index: hostapd-2020-06-08-5a8b3662/wpa_supplicant/config.c
+===================================================================
+--- hostapd-2020-06-08-5a8b3662.orig/wpa_supplicant/config.c
++++ hostapd-2020-06-08-5a8b3662/wpa_supplicant/config.c
+@@ -5072,6 +5072,7 @@ static const struct global_parse_data gl
+ 	{ INT_RANGE(disable_btm, 0, 1), CFG_CHANGED_DISABLE_BTM },
+ 	{ INT_RANGE(extended_key_id, 0, 1), 0 },
+ #endif /* CONFIG_WNM */
++	{ INT_RANGE(disallow_dfs, 0, 1), 0 },
+ };
+ 
+ #undef FUNC
+Index: hostapd-2020-06-08-5a8b3662/wpa_supplicant/config.h
+===================================================================
+--- hostapd-2020-06-08-5a8b3662.orig/wpa_supplicant/config.h
++++ hostapd-2020-06-08-5a8b3662/wpa_supplicant/config.h
+@@ -1581,6 +1581,11 @@ struct wpa_config {
+ 	 */
+ 	int disable_btm;
+ 
++        /**
++         * disallow_dfs - disallow connection on dfs channel(s)
++         */
++        int disallow_dfs;
++
+ 	/**
+ 	 * extended_key_id - Extended Key ID support
+ 	 *
+Index: hostapd-2020-06-08-5a8b3662/wpa_supplicant/config_file.c
+===================================================================
+--- hostapd-2020-06-08-5a8b3662.orig/wpa_supplicant/config_file.c
++++ hostapd-2020-06-08-5a8b3662/wpa_supplicant/config_file.c
+@@ -1606,6 +1606,8 @@ static void wpa_config_write_global(FILE
+ 			config->p2p_interface_random_mac_addr);
+ 	if (config->disable_btm)
+ 		fprintf(f, "disable_btm=1\n");
++        if (config->disallow_dfs)
++                fprintf(f, "disallow_dfs=%d\n", config->disallow_dfs);
+ 	if (config->extended_key_id != DEFAULT_EXTENDED_KEY_ID)
+ 		fprintf(f, "extended_key_id=%d\n",
+ 			config->extended_key_id);
+Index: hostapd-2020-06-08-5a8b3662/wpa_supplicant/events.c
+===================================================================
+--- hostapd-2020-06-08-5a8b3662.orig/wpa_supplicant/events.c
++++ hostapd-2020-06-08-5a8b3662/wpa_supplicant/events.c
+@@ -797,6 +797,39 @@ static int freq_allowed(int *freqs, int
+ }
+ 
+ 
++static int dfs_freq_allowed(struct wpa_supplicant *wpa_s, int freq)
++{
++       struct hostapd_channel_data * channel = NULL;
++    size_t i;
++    int j;
++
++       if (!wpa_s->conf->disallow_dfs)
++               return 1;
++
++    for (i = 0; i < wpa_s->hw.num_modes; i++) {
++        const struct hostapd_hw_modes *mode = &wpa_s->hw.modes[i];
++        if (mode->mode != HOSTAPD_MODE_IEEE80211A)
++            continue;
++        for (j = 0; j < mode->num_channels; j++) {
++            struct hostapd_channel_data *chan;
++            chan = &mode->channels[j];
++            if (chan->freq == freq) {
++                channel = chan;
++                break;
++            }
++        }
++    }
++
++       if (channel == NULL)
++               return 1;
++
++       if (channel->flag & HOSTAPD_CHAN_RADAR)
++               return 0;
++
++       return 1;
++}
++
++
+ static int rate_match(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid,
+ 		      struct wpa_bss *bss, int debug_print)
+ {
+@@ -1295,6 +1328,13 @@ static bool wpa_scan_res_ok(struct wpa_s
+ 		return false;
+ 	}
+ 
++        if (!dfs_freq_allowed(wpa_s, bss->freq)) {
++               if (debug_print)
++                       wpa_dbg(wpa_s, MSG_DEBUG,
++                               "   skip - dfs frequency not allowed");
++	       return false;
++         }
++
+ #ifdef CONFIG_MESH
+ 	if (ssid->mode == WPAS_MODE_MESH && ssid->frequency > 0 &&
+ 	    ssid->frequency != bss->freq) {
