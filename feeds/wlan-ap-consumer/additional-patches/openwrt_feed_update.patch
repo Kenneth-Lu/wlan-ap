@@ -14,7 +14,7 @@ diff -urN a/package/feeds/packages/openvswitch/Makefile b/package/feeds/packages
 diff -urN a/package/network/config/firewall/Makefile b/package/network/config/firewall/Makefile
 --- a/package/network/config/firewall/Makefile	2020-12-15 14:05:57.844484001 +0530
 +++ b/package/network/config/firewall/Makefile	2020-12-15 14:05:57.848483999 +0530
-@@ -48,7 +48,9 @@
+@@ -48,11 +48,15 @@ define Package/firewall/install
  	$(INSTALL_DIR) $(1)/sbin
  	$(INSTALL_BIN) $(PKG_BUILD_DIR)/firewall3 $(1)/sbin/fw3
  	$(INSTALL_DIR) $(1)/etc/init.d
@@ -24,6 +24,12 @@ diff -urN a/package/network/config/firewall/Makefile b/package/network/config/fi
  	$(INSTALL_DIR) $(1)/etc/hotplug.d/iface
  	$(INSTALL_CONF) ./files/firewall.hotplug $(1)/etc/hotplug.d/iface/20-firewall
  	$(INSTALL_DIR) $(1)/etc/config/
++ifndef CONFIG_PACKAGE_opensync
+ 	$(INSTALL_CONF) ./files/firewall.config $(1)/etc/config/firewall
++endif
+ 	$(INSTALL_DIR) $(1)/etc/
+ 	$(INSTALL_CONF) ./files/firewall.user $(1)/etc/firewall.user
+ 	$(INSTALL_DIR) $(1)/usr/share/fw3
 diff -urN a/package/network/services/dnsmasq/Makefile b/package/network/services/dnsmasq/Makefile
 --- a/package/network/services/dnsmasq/Makefile	2020-12-15 14:05:57.848483999 +0530
 +++ b/package/network/services/dnsmasq/Makefile	2020-12-15 14:05:57.848483999 +0530
