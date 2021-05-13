@@ -127,6 +127,10 @@ applyOpenSyncMakefilePatch()
 
     sed -i "s#$CFG80211_SEARCH_STR#$CFG80211_REPLACE_STR#" $OPENSYNC_MAKEFILE_PATH
     sed -i "s#$VENDOR_SEARCH_STR#$VENDOR_REPLACE_STR#" $OPENSYNC_MAKEFILE_PATH
+    # add 3rdparty/webroot to Makefile
+    sed -i '/$(PKG_BUILD_DIR)\/vendor\/adtran/a \\trm -rf $(PKG_BUILD_DIR)/3rdparty && mkdir $(PKG_BUILD_DIR)/3rdparty' $OPENSYNC_MAKEFILE_PATH
+    sed -i '/$(PKG_BUILD_DIR)\/3rdparty/a \\tcp -rf $(TOPDIR)/../device-3rdparty-webroot-OSYNC_2.0.7.0_REF $(PKG_BUILD_DIR)/3rdparty/webroot' $OPENSYNC_MAKEFILE_PATH
+
 }
 
 #***************************************************************************

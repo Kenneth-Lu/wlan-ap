@@ -1,0 +1,11 @@
+Version 0.8
+Fix issue with retry logic on EOF from server
+
+Version 0.7
+Fix potential buffer overflow (MIM)
+
+Version 0.6
+Fix possible crash with malformed ipv6 host names
+Handle host terminated by query
+
+Version 0.5
