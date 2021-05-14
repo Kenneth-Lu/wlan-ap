@@ -1,0 +1,11 @@
+--- a/platform/cfg80211/src/lib/target/ecm_util.c
++++ b/platform/cfg80211/src/lib/target/ecm_util.c
+@@ -28,7 +28,7 @@ static void ecm_sfe_invalidate(const cha
+     while ((ptr = strsep(&flow, ",")))
+         if ((k = strsep(&ptr, "=")) && (v = strsep(&ptr, "")))
+             if (!strcmp(k, "dl_src") || !strcmp(k, "dl_dst")) {
+-                snprintf(cmd, sizeof(cmd),"echo %s > /sys/kernel/debug/sfe_drv/flush_mac", v);
++                snprintf(cmd, sizeof(cmd),"echo %s > /proc/net/nf_flow_table", v);
+ 
+         ret = !cmd_log(cmd);
+         if (!ret) {
