@@ -1,7 +1,18 @@
 diff -urN a/package/feeds/packages/openvswitch/Makefile b/package/feeds/packages/openvswitch/Makefile
---- a/package/feeds/packages/openvswitch/Makefile	2020-12-15 14:05:57.848483999 +0530
-+++ b/package/feeds/packages/openvswitch/Makefile	2020-12-15 14:05:57.848483999 +0530
-@@ -222,7 +222,9 @@
+--- a/package/feeds/packages/openvswitch/Makefile      2021-05-17 15:13:02.483576824 +0800
++++ b/package/feeds/packages/openvswitch/Makefile      2021-05-17 14:50:17.794669133 +0800
+@@ -80,6 +80,10 @@
+	  +kmod-nsh \
+	  +kmod-ipt-conntrack-extra \
+
++ifdef CONFIG_PACKAGE_opensync
++  ovs_kmod_openvswitch_depends+=+kmod-nf-flow
++endif
++
+ ovs_kmod_openvswitch_files:=$(ovs_kmod_upstream_dir)/openvswitch.ko
+ $(eval $(call OvsKmodPackageTemplate,openvswitch))
+
+@@ -199,7 +203,9 @@
  define ovs_common_install
  	$$(INSTALL_DIR) $$(1)/etc/openvswitch
  	$$(INSTALL_DIR) $$(1)/etc/init.d

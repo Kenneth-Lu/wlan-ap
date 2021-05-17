@@ -1,0 +1,181 @@
+--- a/include/linux/netdevice.h
++++ b/include/linux/netdevice.h
+@@ -872,6 +872,9 @@ struct net_device_path_stack {
+ struct net_device_path_ctx {
+ 	const struct net_device *dev;
+ 	const u8		*daddr;
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	struct sk_buff	*skb;
++#endif
+ 
+ 	int			num_vlans;
+ 	struct {
+@@ -2854,8 +2857,13 @@ void dev_remove_offload(struct packet_of
+ 
+ int dev_get_iflink(const struct net_device *dev);
+ int dev_fill_metadata_dst(struct net_device *dev, struct sk_buff *skb);
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++int dev_fill_forward_path(const struct net_device *dev, const u8 *daddr,
++			  struct net_device_path_stack *stack, struct sk_buff *skb);
++#else
+ int dev_fill_forward_path(const struct net_device *dev, const u8 *daddr,
+ 			  struct net_device_path_stack *stack);
++#endif
+ struct net_device *__dev_get_by_flags(struct net *net, unsigned short flags,
+ 				      unsigned short mask);
+ struct net_device *dev_get_by_name(struct net *net, const char *name);
+--- a/net/core/dev.c
++++ b/net/core/dev.c
+@@ -857,13 +857,21 @@ static struct net_device_path *dev_fwd_p
+ 	return &stack->path[k];
+ }
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++int dev_fill_forward_path(const struct net_device *dev, const u8 *daddr,
++			  struct net_device_path_stack *stack, struct sk_buff *skb)
++#else
+ int dev_fill_forward_path(const struct net_device *dev, const u8 *daddr,
+ 			  struct net_device_path_stack *stack)
++#endif
+ {
+ 	const struct net_device *last_dev;
+ 	struct net_device_path_ctx ctx = {
+ 		.dev	= dev,
+ 		.daddr	= daddr,
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++		.skb    = skb,
++#endif
+ 	};
+ 	struct net_device_path *path;
+ 	int ret = 0;
+--- a/net/netfilter/nft_flow_offload.c
++++ b/net/netfilter/nft_flow_offload.c
+@@ -36,11 +36,20 @@ static void nft_default_forward_path(str
+ 	route->tuple[dir].xmit_type	= nft_xmit_type(dst_cache);
+ }
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++static int nft_dev_fill_forward_path(const struct nf_flow_route *route,
++				     const struct dst_entry *dst_cache,
++				     const struct nf_conn *ct,
++				     enum ip_conntrack_dir dir, u8 *ha,
++				     struct net_device_path_stack *stack,
++				     struct sk_buff *skb)
++#else
+ static int nft_dev_fill_forward_path(const struct nf_flow_route *route,
+ 				     const struct dst_entry *dst_cache,
+ 				     const struct nf_conn *ct,
+ 				     enum ip_conntrack_dir dir, u8 *ha,
+ 				     struct net_device_path_stack *stack)
++#endif
+ {
+ 	const void *daddr = &ct->tuplehash[!dir].tuple.src.u3;
+ 	struct net_device *dev = dst_cache->dev;
+@@ -60,7 +69,11 @@ static int nft_dev_fill_forward_path(con
+ 	if (!(nud_state & NUD_VALID))
+ 		return -1;
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	return dev_fill_forward_path(dev, ha, stack, skb);
++#else
+ 	return dev_fill_forward_path(dev, ha, stack);
++#endif
+ }
+ 
+ struct nft_forward_info {
+@@ -179,10 +192,18 @@ static bool nft_flowtable_find_dev(const
+ 	return found;
+ }
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++static void nft_dev_forward_path(struct nf_flow_route *route,
++				 const struct nf_conn *ct,
++				 enum ip_conntrack_dir dir,
++				 struct nft_flowtable *ft,
++				 struct sk_buff *skb)
++#else
+ static void nft_dev_forward_path(struct nf_flow_route *route,
+ 				 const struct nf_conn *ct,
+ 				 enum ip_conntrack_dir dir,
+ 				 struct nft_flowtable *ft)
++#endif
+ {
+ 	const struct dst_entry *dst = route->tuple[dir].dst;
+ 	struct net_device_path_stack stack;
+@@ -190,7 +211,11 @@ static void nft_dev_forward_path(struct
+ 	unsigned char ha[ETH_ALEN];
+ 	int i;
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	if (nft_dev_fill_forward_path(route, dst, ct, dir, ha, &stack, skb) >= 0)
++#else
+ 	if (nft_dev_fill_forward_path(route, dst, ct, dir, ha, &stack) >= 0)
++#endif
+ 		nft_dev_path_info(&stack, &info, ha, &ft->data);
+ 
+ 	if (!info.indev || !nft_flowtable_find_dev(info.indev, ft))
+@@ -244,8 +269,13 @@ static int nft_flow_route(const struct n
+ 
+ 	if (route->tuple[dir].xmit_type	== FLOW_OFFLOAD_XMIT_NEIGH &&
+ 	    route->tuple[!dir].xmit_type == FLOW_OFFLOAD_XMIT_NEIGH) {
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++		nft_dev_forward_path(route, ct, dir, ft, pkt->skb);
++		nft_dev_forward_path(route, ct, !dir, ft, pkt->skb);
++#else
+ 		nft_dev_forward_path(route, ct, dir, ft);
+ 		nft_dev_forward_path(route, ct, !dir, ft);
++#endif
+ 	}
+ 
+ 	return 0;
+--- a/net/netfilter/xt_FLOWOFFLOAD.c
++++ b/net/netfilter/xt_FLOWOFFLOAD.c
+@@ -233,11 +233,20 @@ static bool flow_is_valid_ether_device(c
+ 	return true;
+ }
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++static void
++xt_flowoffload_route_check_path(struct nf_flow_route *route,
++				const struct nf_conn *ct,
++				enum ip_conntrack_dir dir,
++				struct net_device **out_dev,
++				struct sk_buff *skb)
++#else
+ static void
+ xt_flowoffload_route_check_path(struct nf_flow_route *route,
+ 				const struct nf_conn *ct,
+ 				enum ip_conntrack_dir dir,
+ 				struct net_device **out_dev)
++#endif
+ {
+ 	const struct dst_entry *dst = route->tuple[dir].dst;
+ 	const void *daddr = &ct->tuplehash[!dir].tuple.src.u3;
+@@ -273,8 +282,13 @@ xt_flowoffload_route_check_path(struct n
+ 	if (!(nud_state & NUD_VALID))
+ 		return;
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	if (dev_fill_forward_path(dev, route->tuple[dir].out.h_dest, &stack, skb) ||
++	    !stack.num_paths)
++#else
+ 	if (dev_fill_forward_path(dev, route->tuple[dir].out.h_dest, &stack) ||
+ 	    !stack.num_paths)
++#endif
+ 		return;
+ 
+ 	prev_type = DEV_PATH_ETHERNET;
+@@ -399,8 +413,13 @@ xt_flowoffload_route(struct sk_buff *skb
+ 	if (ret)
+ 		return ret;
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	xt_flowoffload_route_check_path(route, ct, dir, &dev[!dir], skb);
++	xt_flowoffload_route_check_path(route, ct, !dir, &dev[dir], skb);
++#else
+ 	xt_flowoffload_route_check_path(route, ct, dir, &dev[!dir]);
+ 	xt_flowoffload_route_check_path(route, ct, !dir, &dev[dir]);
++#endif
+ 
+ 	return 0;
+ }
