@@ -7,6 +7,13 @@ packages:
   - kmod-mt7915e
   - kmod-btmtkuart
   - mt7622bt-firmware
+  - kmod-nft-bridge=y
+  - kmod-nft-core=y
+  - kmod-nft-nat=y
+  - kmod-nft-netdev=y
+  - kmod-nft-offload=y
+  - libnftnl=y
+  - nftables-json=y
 diffconfig: |
   CONFIG_TARGET_PROFILE="DEVICE_mediatek_mt7622-rfb1"
   CONFIG_TARGET_mediatek_mt7622_DEVICE_mediatek_mt7622-rfb1=y
