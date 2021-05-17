@@ -1,0 +1,391 @@
+--- a/net/netfilter/nf_flow_table_ip.c
++++ b/net/netfilter/nf_flow_table_ip.c
+@@ -350,11 +350,21 @@ static void nf_flow_encap_pop(struct sk_
+ 	}
+ }
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++int (*ovs_update_stats_impl)(
++	struct sk_buff *skb, int skb_data_offset, struct sw_flow_id *lufid, bool xlated)
++	__rcu __read_mostly;
++EXPORT_SYMBOL(ovs_update_stats_impl);
++#endif
++
+ static unsigned int nf_flow_queue_xmit(struct net *net, struct sk_buff *skb,
+ 				       const struct flow_offload_tuple_rhash *tuplehash,
+ 				       unsigned short type)
+ {
+ 	struct net_device *outdev;
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	int (*ovs_update_stats_func)(struct sk_buff *, int, struct sw_flow_id *, bool);
++#endif
+ 
+ 	outdev = dev_get_by_index_rcu(net, tuplehash->tuple.out.ifidx);
+ 	if (!outdev)
+@@ -363,6 +373,14 @@ static unsigned int nf_flow_queue_xmit(s
+ 	skb->dev = outdev;
+ 	dev_hard_header(skb, skb->dev, type, tuplehash->tuple.out.h_dest,
+ 			tuplehash->tuple.out.h_source, skb->len);
++
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	// Update ovs flows after translation.
++	ovs_update_stats_func = rcu_dereference(ovs_update_stats_impl);
++	if (likely(ovs_update_stats_func))
++		ovs_update_stats_func(skb, 0, &tuplehash->tuple.ovs_flow_id_xlated, true);
++#endif
++
+ 	dev_queue_xmit(skb);
+ 
+ 	return NF_STOLEN;
+@@ -384,6 +402,10 @@ nf_flow_offload_ip_hook(void *priv, stru
+ 	__be32 nexthop;
+ 	u32 offset = 0;
+ 	int ret;
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	int (*ovs_update_stats_func)(struct sk_buff *, int, struct sw_flow_id *, bool);
++#endif
++
+ 
+ 	if (skb->protocol != htons(ETH_P_IP) &&
+ 	    !nf_flow_skb_encap_protocol(skb, htons(ETH_P_IP)))
+@@ -418,6 +440,16 @@ nf_flow_offload_ip_hook(void *priv, stru
+ 		return NF_ACCEPT;
+ 	}
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	// Update ovs flows before translation.
++	// TODO: need to check if offset works for different L2 header
++	ovs_update_stats_func = rcu_dereference(ovs_update_stats_impl);
++	if (likely(ovs_update_stats_func)) {
++		ovs_update_stats_func(skb, skb_mac_header_len(skb),
++			&tuplehash->tuple.ovs_flow_id_orig, false);
++	}
++#endif
++
+ 	nf_flow_encap_pop(skb, tuplehash);
+ 	thoff -= offset;
+ 
+--- a/net/openvswitch/datapath.c
++++ b/net/openvswitch/datapath.c
+@@ -404,6 +404,130 @@ struct net_device *ovs_port_dev_get(stru
+ 	return dest_dev;
+ }
+ EXPORT_SYMBOL(ovs_port_dev_get);
++
++static int ovs_get_bridge_from_dp
++	(struct datapath *dp, struct vport *vports[], int sz) {
++    int i, count = 0;
++
++    for (i = 0; i < DP_VPORT_HASH_BUCKETS; i++) {
++        struct vport *vport;
++        struct hlist_node *n;
++        hlist_for_each_entry_safe(vport, n, &dp->ports[i], dp_hash_node)
++			// port_no 0 is ovs-system
++            if(vport->ops->type == OVS_VPORT_TYPE_INTERNAL && vport->port_no != 0) {
++				vports[count] = vport;
++				count++;
++				if (count == sz) return count;
++            }
++    }
++    return count;
++}
++
++int ovs_extern_accelerator_update_stats(
++	struct sk_buff *skb, int skb_data_offset, struct sw_flow_id *lufid, bool xlated)
++{
++	struct vport *vport;
++	int error;
++	struct sw_flow_key key;
++	struct sw_flow *flow;
++	struct dp_stats_percpu *stats;
++	u64 *stats_counter;
++	u32 n_mask_hit = 0;
++	u32 n_cache_hit = 0;
++	struct datapath *dp;
++	struct vport *vports[16];
++	int i, vports_found;
++
++	skb->data -= skb_data_offset;
++	skb->len += skb_data_offset;
++
++	if (skb->pkt_type == PACKET_LOOPBACK)
++		goto err;
++
++	vport = ovs_netdev_get_vport(skb->dev);
++	if (unlikely(!vport))
++		goto err;
++
++	dp = vport->dp;
++
++	/* Frist Look up flow with key.*/
++	if (!lufid->ufid_len)
++	{
++		if (!xlated) {
++			OVS_CB(skb)->input_vport = vport;
++			OVS_CB(skb)->mru = 0;
++			OVS_CB(skb)->cutlen = 0;
++
++			error = ovs_flow_key_extract(NULL, skb, &key);
++			if (unlikely(error))
++				goto err;
++
++			flow = ovs_flow_tbl_lookup_stats(&(dp->table), &key,
++				skb_get_hash(skb), &n_mask_hit, &n_cache_hit);
++		}
++		else {
++			vports_found = ovs_get_bridge_from_dp(dp, vports, ARRAY_SIZE(vports));
++
++			for (i = 0; i < vports_found; i++) {
++				vport = vports[i];
++
++				if (unlikely(!vport))
++					continue;
++
++				OVS_CB(skb)->input_vport = vport;
++				OVS_CB(skb)->mru = 0;
++				OVS_CB(skb)->cutlen = 0;
++
++				memset(&key, 0, sizeof(key));
++				error = ovs_flow_key_extract(NULL, skb, &key);
++				if (unlikely(error))
++					continue;
++
++				key.ct_state = OVS_CS_F_TRACKED;
++
++				flow = ovs_flow_tbl_lookup_stats(&(dp->table), &key,
++					skb_get_hash(skb), &n_mask_hit, &n_cache_hit);
++
++				if (flow)
++					break;
++			}
++		}
++
++		if (unlikely(!flow))
++			goto err;
++
++		memcpy(lufid, &flow->id, sizeof(struct sw_flow_id));
++	} else	{
++		/* Subsequent Look up the flow with ufid.*/
++		flow = ovs_flow_tbl_lookup_ufid(&(dp->table), lufid);
++		if (unlikely(!flow))
++			goto err;
++	}
++
++	stats = this_cpu_ptr(dp->stats_percpu);
++	ovs_flow_stats_update((struct sw_flow *)flow, 0, skb);
++	stats_counter = &stats->n_hit;
++
++	/* Update datapath statistics. */
++	u64_stats_update_begin(&stats->syncp);
++	(*stats_counter)++;
++	stats->n_mask_hit += n_mask_hit;
++	stats->n_cache_hit += n_cache_hit;
++	u64_stats_update_end(&stats->syncp);
++
++	skb->data += skb_data_offset;
++	skb->len -= skb_data_offset;
++	return 0;
++
++err:
++	lufid->ufid_len = 0;
++	skb->data += skb_data_offset;
++	skb->len -= skb_data_offset;
++	return 1;
++}
++
++extern int (*ovs_update_stats_impl)(
++	struct sk_buff *skb, int skb_data_offset, struct sw_flow_id *lufid, bool xlated);
+ #endif
+ 
+ int ovs_dp_upcall(struct datapath *dp, struct sk_buff *skb,
+@@ -2705,6 +2829,9 @@ static int __init dp_init(void)
+ 		     sizeof_field(struct sk_buff, cb));
+ 
+ 	pr_info("Open vSwitch switching datapath\n");
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	rcu_assign_pointer(ovs_update_stats_impl, ovs_extern_accelerator_update_stats);
++#endif
+ 
+ 	err = action_fifos_init();
+ 	if (err)
+@@ -2755,11 +2882,17 @@ error_unreg_rtnl_link:
+ error_action_fifos_exit:
+ 	action_fifos_exit();
+ error:
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	rcu_assign_pointer(ovs_update_stats_impl, NULL);
++#endif
+ 	return err;
+ }
+ 
+ static void dp_cleanup(void)
+ {
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	rcu_assign_pointer(ovs_update_stats_impl, NULL);
++#endif
+ 	dp_unregister_genl(ARRAY_SIZE(dp_genl_families));
+ 	ovs_netdev_exit();
+ 	unregister_netdevice_notifier(&ovs_dp_device_notifier);
+--- a/include/net/netfilter/nf_flow_table.h
++++ b/include/net/netfilter/nf_flow_table.h
+@@ -8,6 +8,9 @@
+ #include <linux/rcupdate.h>
+ #include <linux/netfilter.h>
+ #include <linux/netfilter/nf_conntrack_tuple_common.h>
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++#include <net/openvswitch/flow.h>
++#endif
+ #include <net/flow_offload.h>
+ #include <net/dst.h>
+ 
+@@ -137,6 +140,10 @@ struct flow_offload_tuple {
+ 			u8		h_dest[ETH_ALEN];
+ 		} out;
+ 	};
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	struct sw_flow_id ovs_flow_id_orig;
++	struct sw_flow_id ovs_flow_id_xlated;
++#endif
+ };
+ 
+ struct flow_offload_tuple_rhash {
+--- /dev/null
++++ b/include/net/openvswitch/flow.h
+@@ -0,0 +1,137 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++/*
++ * Copyright (c) 2007-2017 Nicira, Inc.
++ */
++
++#ifndef FLOW_H
++#define FLOW_H 1
++
++#include <linux/cache.h>
++#include <linux/kernel.h>
++#include <linux/netlink.h>
++#include <linux/openvswitch.h>
++#include <linux/spinlock.h>
++#include <linux/types.h>
++#include <linux/rcupdate.h>
++#include <linux/if_ether.h>
++#include <linux/in6.h>
++#include <linux/jiffies.h>
++#include <linux/time.h>
++#include <linux/cpumask.h>
++#include <net/inet_ecn.h>
++#include <net/ip_tunnels.h>
++#include <net/dst_metadata.h>
++#include <net/nsh.h>
++
++struct vlan_head {
++	__be16 tpid; /* Vlan type. Generally 802.1q or 802.1ad.*/
++	__be16 tci;  /* 0 if no VLAN, VLAN_CFI_MASK set otherwise. */
++};
++
++struct ovs_key_nsh {
++	struct ovs_nsh_key_base base;
++	__be32 context[NSH_MD1_CONTEXT_SIZE];
++};
++
++struct sw_flow_key {
++	u8 tun_opts[IP_TUNNEL_OPTS_MAX];
++	u8 tun_opts_len;
++	struct ip_tunnel_key tun_key;	/* Encapsulating tunnel key. */
++	struct {
++		u32	priority;	/* Packet QoS priority. */
++		u32	skb_mark;	/* SKB mark. */
++		u16	in_port;	/* Input switch port (or DP_MAX_PORTS). */
++	} __packed phy; /* Safe when right after 'tun_key'. */
++	u8 mac_proto;			/* MAC layer protocol (e.g. Ethernet). */
++	u8 tun_proto;			/* Protocol of encapsulating tunnel. */
++	u32 ovs_flow_hash;		/* Datapath computed hash value.  */
++	u32 recirc_id;			/* Recirculation ID.  */
++	struct {
++		u8     src[ETH_ALEN];	/* Ethernet source address. */
++		u8     dst[ETH_ALEN];	/* Ethernet destination address. */
++		struct vlan_head vlan;
++		struct vlan_head cvlan;
++		__be16 type;		/* Ethernet frame type. */
++	} eth;
++	/* Filling a hole of two bytes. */
++	u8 ct_state;
++	u8 ct_orig_proto;		/* CT original direction tuple IP
++					 * protocol.
++					 */
++	union {
++		struct {
++			__be32 top_lse;	/* top label stack entry */
++		} mpls;
++		struct {
++			u8     proto;	/* IP protocol or lower 8 bits of ARP opcode. */
++			u8     tos;	    /* IP ToS. */
++			u8     ttl;	    /* IP TTL/hop limit. */
++			u8     frag;	/* One of OVS_FRAG_TYPE_*. */
++		} ip;
++	};
++	u16 ct_zone;			/* Conntrack zone. */
++	struct {
++		__be16 src;		/* TCP/UDP/SCTP source port. */
++		__be16 dst;		/* TCP/UDP/SCTP destination port. */
++		__be16 flags;		/* TCP flags. */
++	} tp;
++	union {
++		struct {
++			struct {
++				__be32 src;	/* IP source address. */
++				__be32 dst;	/* IP destination address. */
++			} addr;
++			union {
++				struct {
++					__be32 src;
++					__be32 dst;
++				} ct_orig;	/* Conntrack original direction fields. */
++				struct {
++					u8 sha[ETH_ALEN];	/* ARP source hardware address. */
++					u8 tha[ETH_ALEN];	/* ARP target hardware address. */
++				} arp;
++			};
++		} ipv4;
++		struct {
++			struct {
++				struct in6_addr src;	/* IPv6 source address. */
++				struct in6_addr dst;	/* IPv6 destination address. */
++			} addr;
++			__be32 label;			/* IPv6 flow label. */
++			union {
++				struct {
++					struct in6_addr src;
++					struct in6_addr dst;
++				} ct_orig;	/* Conntrack original direction fields. */
++				struct {
++					struct in6_addr target;	/* ND target address. */
++					u8 sll[ETH_ALEN];	/* ND source link layer address. */
++					u8 tll[ETH_ALEN];	/* ND target link layer address. */
++				} nd;
++			};
++		} ipv6;
++		struct ovs_key_nsh nsh;         /* network service header */
++	};
++	struct {
++		/* Connection tracking fields not packed above. */
++		struct {
++			__be16 src;	/* CT orig tuple tp src port. */
++			__be16 dst;	/* CT orig tuple tp dst port. */
++		} orig_tp;
++		u32 mark;
++		struct ovs_key_ct_labels labels;
++	} ct;
++
++} __aligned(BITS_PER_LONG/8); /* Ensure that we can do comparisons as longs. */
++
++#define MAX_UFID_LENGTH 16 /* 128 bits */
++
++struct sw_flow_id {
++	u32 ufid_len;
++	union {
++		u32 ufid[MAX_UFID_LENGTH / 4];
++		struct sw_flow_key *unmasked_key;
++	};
++};
++
++#endif

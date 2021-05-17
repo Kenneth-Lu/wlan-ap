@@ -1,0 +1,120 @@
+--- a/net/netfilter/nft_flow_offload.c
++++ b/net/netfilter/nft_flow_offload.c
+@@ -298,6 +298,22 @@ static bool nft_flow_offload_skip(struct
+ 	return false;
+ }
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++#include <net/netfilter/nf_conntrack_acct.h>
++static int nft_flow_offload_ct_skip(struct nf_conn *ct)
++{
++	extern int OFFLOAD_MIN_THRESHOLD;
++	struct nf_conn_acct *nca = nf_conn_acct_find(ct);
++	if (nca) {
++		if (atomic64_read(&nca->counter[IP_CT_DIR_ORIGINAL].packets) +
++			atomic64_read(&nca->counter[IP_CT_DIR_REPLY].packets) <
++			OFFLOAD_MIN_THRESHOLD)
++			return true;
++	}
++	return false;
++}
++#endif
++
+ static void nft_flow_offload_eval(const struct nft_expr *expr,
+ 				  struct nft_regs *regs,
+ 				  const struct nft_pktinfo *pkt)
+@@ -319,6 +335,11 @@ static void nft_flow_offload_eval(const
+ 	if (!ct)
+ 		goto out;
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	if (nft_flow_offload_ct_skip(ct))
++		goto out;
++#endif
++
+ 	switch (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.protonum) {
+ 	case IPPROTO_TCP:
+ 		tcph = skb_header_pointer(pkt->skb, pkt->xt.thoff,
+--- a/net/netfilter/nf_flow_table_core.c
++++ b/net/netfilter/nf_flow_table_core.c
+@@ -761,28 +761,80 @@ static ssize_t proc_flush_flows(
+ 	return count;
+ }
+ 
++int OFFLOAD_MIN_THRESHOLD = 50;
++EXPORT_SYMBOL_GPL(OFFLOAD_MIN_THRESHOLD);
++
++static ssize_t proc_min_pkt_read(
++	struct file *file, char __user *ubuf, size_t count, loff_t *ppos)
++{
++	char str[8];
++	int str_len;
++	int ret_len, byte_copy;
++	int offset = *ppos;
++
++	str_len = snprintf(str, sizeof(str), "%d\n", OFFLOAD_MIN_THRESHOLD);
++	str_len -= offset;
++
++	if (str_len <= 0)
++		return 0;
++
++	byte_copy = copy_to_user(ubuf, &str[offset], str_len);
++	if (!byte_copy) byte_copy = str_len;
++
++	*ppos += byte_copy;
++	return byte_copy;
++}
++
++static ssize_t proc_min_pkt_write(
++	struct file *file, const char __user *ubuf, size_t count, loff_t *ppos)
++{
++	char kbuf[8];
++	int new_value, copy_count;
++
++	copy_count = min(count, sizeof(kbuf) - 1);
++
++	if(copy_from_user(kbuf, ubuf, copy_count))
++		return -EFAULT;
++
++	if (sscanf(kbuf, "%d", &new_value) == 1)
++		OFFLOAD_MIN_THRESHOLD = new_value;
++
++	return count;
++}
++
+ extern int (*l2uf_flush_impl)(struct sk_buff *);
+ 
+ static struct proc_dir_entry *proc_entry;
++static struct proc_dir_entry *proc_min_pkt_entry;
+ #define PROC_PATH "nf_flow_table"
++#define PROC_MIN_PKT_PATH "nf_flow_min_pkt"
+ 
+ static const struct proc_ops proc_flow_table_ops = {
+ 	.proc_read = proc_print_all_flows,
+ 	.proc_write = proc_flush_flows,
+ };
+ 
++static const struct proc_ops proc_flow_min_pkt_ops = {
++	.proc_read = proc_min_pkt_read,
++	.proc_write = proc_min_pkt_write,
++};
++
+ static void create_new_proc_entry(void)
+ {
+ 	extern struct net init_net;
+ 
+ 	proc_entry = proc_create(
+ 		PROC_PATH, 0, init_net.proc_net, &proc_flow_table_ops);
++	proc_min_pkt_entry = proc_create(
++		PROC_MIN_PKT_PATH, 0, init_net.proc_net, &proc_flow_min_pkt_ops);
+ }
+ 
+ static void proc_cleanup(void)
+ {
+ 	if (proc_entry)
+ 		remove_proc_entry(PROC_PATH, NULL);
++	if (proc_min_pkt_entry)
++		remove_proc_entry(PROC_MIN_PKT_PATH, NULL);
+ }
+ #endif
+ 

@@ -1,0 +1,209 @@
+--- a/net/openvswitch/vport-internal_dev.c
++++ b/net/openvswitch/vport-internal_dev.c
+@@ -95,12 +95,46 @@ internal_get_stats(struct net_device *de
+ 	dev_fetch_sw_netstats(stats, dev->tstats);
+ }
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++static int internal_dev_fill_forward_path(struct net_device_path_ctx *ctx,
++				struct net_device_path *path)
++{
++	struct net_device *dst;
++	struct sk_buff *skb = ctx->skb;
++	int ip_ver;
++
++	if (!skb)
++		return -1;
++
++	switch (skb->protocol) {
++	case htons(ETH_P_IP):
++		ip_ver = 4;
++		break;
++	case htons(ETH_P_IPV6):
++		ip_ver = 6;
++		break;
++	default:
++		return -1;
++	}
++
++	dst = ovs_port_dev_get(ctx->dev, ctx->daddr, ip_ver, ctx->skb);
++	path->type = DEV_PATH_BRIDGE;
++	path->dev = ctx->dev;
++	ctx->dev = dst;
++
++	return 0;
++}
++#endif
++
+ static const struct net_device_ops internal_dev_netdev_ops = {
+ 	.ndo_open = internal_dev_open,
+ 	.ndo_stop = internal_dev_stop,
+ 	.ndo_start_xmit = internal_dev_xmit,
+ 	.ndo_set_mac_address = eth_mac_addr,
+ 	.ndo_get_stats64 = internal_get_stats,
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	.ndo_fill_forward_path = internal_dev_fill_forward_path,
++#endif
+ };
+ 
+ static struct rtnl_link_ops internal_dev_link_ops __read_mostly = {
+--- a/net/openvswitch/datapath.c
++++ b/net/openvswitch/datapath.c
+@@ -267,6 +267,145 @@ out:
+ 	u64_stats_update_end(&stats->syncp);
+ }
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++static struct net_device *ovs_flow_get_single_dest(struct sw_flow *flow, struct datapath *dp)
++{
++	struct sw_flow_actions *sf_acts;
++	const struct nlattr *a;
++	struct vport *vport = NULL;
++	int rem;
++	int port_no = -1;
++
++	sf_acts = rcu_dereference(flow->sf_acts);
++
++	for (a = sf_acts->actions, rem = sf_acts->actions_len; rem > 0;
++	     a = nla_next(a, &rem)) {
++		if(nla_type(a) == OVS_ACTION_ATTR_OUTPUT) {
++			if(port_no == -1)
++				port_no = nla_get_u32(a);
++			else { //flow are not learned, and there are multiple dest
++				port_no = -1;
++				break;
++			}
++		}
++	}
++
++	if(port_no != -1) {
++		vport = ovs_lookup_vport(dp, port_no);
++
++		if (vport)
++			return vport->dev;
++	}
++
++	return NULL;
++}
++
++static struct net_device *ovs_flow_find_src_dev(struct datapath *dp, char *src_mac, struct net_device *dst_dev)
++{
++	struct table_instance *ti;
++	struct sw_flow_key *key;
++	struct sw_flow *flow;
++	struct vport *in_vport = NULL;
++	struct vport *act_vport = NULL;
++	struct net_device *dev = NULL;
++	struct sw_flow_actions *sf_acts;
++	const struct nlattr *a;
++	int rem;
++	int i;
++	int ver;
++	int in_port;
++	int act_port;
++
++	ti = rcu_dereference(dp->table.ti);
++
++	ver = ti->node_ver;
++	for (i = 0; i < ti->n_buckets; i++) {
++		struct hlist_head *head;
++
++		head = &ti->buckets[i];
++
++		hlist_for_each_entry(flow, head, flow_table.node[ver]) {
++			key = &flow->key;
++
++			if (!memcmp(key->eth.src, src_mac, ETH_ALEN) && !memcmp(key->eth.dst, dst_dev->dev_addr, ETH_ALEN)) {
++				sf_acts = rcu_dereference(flow->sf_acts);
++
++				for (a = sf_acts->actions, rem = sf_acts->actions_len; rem > 0;
++					 a = nla_next(a, &rem)) {
++					if(nla_type(a) == OVS_ACTION_ATTR_OUTPUT) {
++						act_port = nla_get_u32(a);
++						act_vport = ovs_lookup_vport(dp, act_port);
++						if ((act_vport) && (act_vport->dev == dst_dev)) {
++							in_port = key->phy.in_port;
++							in_vport = ovs_lookup_vport(dp, in_port);
++							if (in_vport) {
++								dev = in_vport->dev;
++								goto done;
++							}
++						}
++					}
++				}
++			}
++		}
++	}
++
++done:
++	return dev;
++}
++
++struct net_device *ovs_port_dev_get(struct net_device *src_dev, char *dst_mac, int ip_version, struct sk_buff *skb)
++{
++	struct net_device *dest_dev = NULL;
++	struct datapath *dp;
++	struct vport *src_vport = NULL;
++	struct sw_flow *flow = NULL;
++	struct sw_flow_key key;
++	int tbl_idx;
++	int search_tables[] = {
++		ip_version == 4 ? htons(ETH_P_IP) : htons(ETH_P_IPV6),
++		ETH_P_ARP,
++	};
++
++	rcu_read_lock();
++
++	src_vport = ovs_internal_dev_get_vport(src_dev);
++	if (!src_vport) {
++		rcu_read_unlock();
++		return NULL;
++	}
++
++	dp = src_vport->dp;
++	if (!dp) {
++		rcu_read_unlock();
++		return NULL;
++	}
++
++	memset(&key, 0, sizeof(struct sw_flow_key));
++	key.phy.in_port = src_vport->port_no;
++	memcpy(key.eth.src, src_dev->dev_addr, ETH_ALEN);
++	memcpy(key.eth.dst, dst_mac, ETH_ALEN);
++
++	for (tbl_idx = 0; tbl_idx < ARRAY_SIZE(search_tables); tbl_idx++) {
++		key.eth.type = search_tables[tbl_idx];
++		flow = ovs_flow_tbl_lookup(&dp->table, &key);
++		if (flow) {
++			dest_dev = ovs_flow_get_single_dest(flow, dp);
++			if (dest_dev)
++				break;
++		}
++	}
++
++	if (!dest_dev) {
++		dest_dev = ovs_flow_find_src_dev(dp, dst_mac, src_dev);
++	}
++
++	rcu_read_unlock();
++
++	return dest_dev;
++}
++EXPORT_SYMBOL(ovs_port_dev_get);
++#endif
++
+ int ovs_dp_upcall(struct datapath *dp, struct sk_buff *skb,
+ 		  const struct sw_flow_key *key,
+ 		  const struct dp_upcall_info *upcall_info,
+--- a/net/openvswitch/datapath.h
++++ b/net/openvswitch/datapath.h
+@@ -239,6 +239,9 @@ DECLARE_STATIC_KEY_FALSE(tc_recirc_shari
+ 
+ void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key);
+ void ovs_dp_detach_port(struct vport *);
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++struct net_device *ovs_port_dev_get(struct net_device *src_dev, char *dst_mac, int ip_version, struct sk_buff *skb);
++#endif
+ int ovs_dp_upcall(struct datapath *, struct sk_buff *,
+ 		  const struct sw_flow_key *, const struct dp_upcall_info *,
+ 		  uint32_t cutlen);

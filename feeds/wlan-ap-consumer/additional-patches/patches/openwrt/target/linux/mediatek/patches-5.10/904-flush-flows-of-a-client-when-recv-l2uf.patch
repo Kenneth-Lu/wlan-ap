@@ -1,0 +1,102 @@
+--- a/net/core/dev.c
++++ b/net/core/dev.c
+@@ -147,6 +147,9 @@
+ #include <net/devlink.h>
+ #include <linux/pm_runtime.h>
+ #include <linux/prandom.h>
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++#include <net/netfilter/nf_flow_table.h>
++#endif
+ 
+ #include "net-sysfs.h"
+ 
+@@ -4856,6 +4859,11 @@ out_redir:
+ }
+ EXPORT_SYMBOL_GPL(do_xdp_generic);
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++int (*l2uf_flush_impl)(struct sk_buff *) __rcu __read_mostly;
++EXPORT_SYMBOL_GPL(l2uf_flush_impl);
++#endif
++
+ static int netif_rx_internal(struct sk_buff *skb)
+ {
+ 	int ret;
+@@ -5202,6 +5210,9 @@ static int __netif_receive_skb_core(stru
+ 	bool deliver_exact = false;
+ 	int ret = NET_RX_DROP;
+ 	__be16 type;
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	int (*l2un_flush_func)(struct sk_buff *);
++#endif
+ 
+ 	net_timestamp_check(!netdev_tstamp_prequeue, skb);
+ 
+@@ -5216,6 +5227,13 @@ static int __netif_receive_skb_core(stru
+ 
+ 	pt_prev = NULL;
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	l2un_flush_func = rcu_dereference(l2uf_flush_impl);
++	if (l2un_flush_func) {
++		l2un_flush_func(skb);
++	}
++#endif
++
+ another_round:
+ 	skb->skb_iif = skb->dev->ifindex;
+ 
+--- a/net/netfilter/nf_flow_table_core.c
++++ b/net/netfilter/nf_flow_table_core.c
+@@ -715,6 +715,26 @@ int flush_flows_by_mac(char *mac_address
+ }
+ EXPORT_SYMBOL_GPL(flush_flows_by_mac);
+ 
++int flush_flows_by_l2uf(struct sk_buff *skb)
++{
++	struct ethhdr *l2hdr = eth_hdr(skb);
++	int flush_count = 0;
++
++	if (unlikely((skb->pkt_type == PACKET_BROADCAST) &&
++			(ntohs(skb->protocol) == ETH_P_802_2) &&
++			(skb->len == 6 || skb->len == 8))) {
++		/* Standard L2UF has skb->len=6, but QCA boards produce L2UF with skb->len=8 */
++		flush_count = flush_flows_by_mac(l2hdr->h_source);
++		printk(KERN_INFO "flush %d flows by %02X:%02X:%02X:%02X:%02X:%02X from %s\n",
++			flush_count,
++			l2hdr->h_source[0], l2hdr->h_source[1],
++			l2hdr->h_source[2], l2hdr->h_source[3],
++			l2hdr->h_source[4], l2hdr->h_source[5],
++			skb->dev ? skb->dev->name : "(null)");
++	}
++	return flush_count;
++}
++
+ static ssize_t proc_flush_flows(
+ 	struct file *file, const char __user *ubuf, size_t count, loff_t *ppos)
+ {
+@@ -741,6 +761,8 @@ static ssize_t proc_flush_flows(
+ 	return count;
+ }
+ 
++extern int (*l2uf_flush_impl)(struct sk_buff *);
++
+ static struct proc_dir_entry *proc_entry;
+ #define PROC_PATH "nf_flow_table"
+ 
+@@ -774,6 +796,7 @@ static int __init nf_flow_table_module_i
+ 
+ #ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
+ 	create_new_proc_entry();
++	rcu_assign_pointer(l2uf_flush_impl, flush_flows_by_l2uf);
+ #endif
+ 
+ 	ret = register_netdevice_notifier(&flow_offload_netdev_notifier);
+@@ -787,6 +810,7 @@ static void __exit nf_flow_table_module_
+ {
+ #ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
+ 	proc_cleanup();
++	rcu_assign_pointer(l2uf_flush_impl, NULL);
+ #endif
+ 	unregister_netdevice_notifier(&flow_offload_netdev_notifier);
+ 	nf_flow_table_offload_exit();

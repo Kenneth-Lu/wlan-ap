@@ -1,0 +1,42 @@
+--- a/net/netfilter/nft_flow_offload.c
++++ b/net/netfilter/nft_flow_offload.c
+@@ -283,6 +283,11 @@ static int nft_flow_route(const struct n
+ 
+ static bool nft_flow_offload_skip(struct sk_buff *skb, int family)
+ {
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	struct iphdr *iph = ip_hdr(skb);
++	struct udphdr *transport_header;
++#endif
++
+ 	if (skb_sec_path(skb))
+ 		return true;
+ 
+@@ -293,6 +298,27 @@ static bool nft_flow_offload_skip(struct
+ 
+ 		if (unlikely(opt->optlen))
+ 			return true;
++
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++		if ((iph->protocol == IPPROTO_TCP ||
++			iph->protocol == IPPROTO_UDP) &&
++			skb_transport_header_was_set(skb)) {
++
++			transport_header = (struct udphdr *) skb_transport_header(skb);
++			/* not fastpath DNS packets */
++			if (htons(transport_header->source) == 53 ||
++				htons(transport_header->dest) == 53) {
++				return true;
++			}
++			/* not fastpath DHCP packets */
++			if (htons(transport_header->source) == 67 ||
++				htons(transport_header->dest) == 67 ||
++			    htons(transport_header->source) == 68 ||
++			    htons(transport_header->dest) == 68) {
++				return true;
++			}
++		}
++#endif
+ 	}
+ 
+ 	return false;

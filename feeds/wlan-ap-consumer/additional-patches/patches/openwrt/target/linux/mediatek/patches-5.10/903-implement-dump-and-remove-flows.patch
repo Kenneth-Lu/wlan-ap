@@ -1,0 +1,189 @@
+--- a/net/netfilter/nf_flow_table_core.c
++++ b/net/netfilter/nf_flow_table_core.c
+@@ -5,6 +5,9 @@
+ #include <linux/netfilter.h>
+ #include <linux/rhashtable.h>
+ #include <linux/netdevice.h>
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++#include <linux/proc_fs.h>
++#endif
+ #include <net/ip.h>
+ #include <net/ip6_route.h>
+ #include <net/netfilter/nf_flow_table.h>
+@@ -624,6 +627,143 @@ static struct notifier_block flow_offloa
+ 	.notifier_call	= nf_flow_table_netdev_event,
+ };
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++struct flush_flow_data {
++	char *mac_address;
++	int count;
++};
++
++static void nf_flow_table_do_teardown(struct flow_offload *flow, void *data)
++{
++	struct flush_flow_data *ffd = data;
++	struct flow_offload_tuple *flow_orig = &flow->tuplehash[FLOW_OFFLOAD_DIR_ORIGINAL].tuple;
++	struct flow_offload_tuple *flow_reply = &flow->tuplehash[FLOW_OFFLOAD_DIR_REPLY].tuple;
++
++	if (!ffd->mac_address) {
++		flow_offload_teardown(flow);
++		ffd->count++;
++	}
++	else if (!memcmp(flow_orig->out.h_dest, ffd->mac_address, ETH_ALEN) ||
++		!memcmp(flow_reply->out.h_dest, ffd->mac_address, ETH_ALEN)) {
++		flow_offload_teardown(flow);
++		ffd->count++;
++	}
++}
++
++static void print_one_flow_tuple(struct flow_offload_tuple *tuple)
++{
++	printk(KERN_INFO "%c %pi4(%05d)->%pi4(%05d) ",
++		tuple->dir ? '\\' : '/',
++		&tuple->src_v4, ntohs(tuple->src_port), &tuple->dst_v4, ntohs(tuple->dst_port));
++	printk(KERN_CONT "l3proto=%02d l4proto=%02d type=%d %pM->%pM ",
++		tuple->l3proto, tuple->l4proto, tuple->xmit_type,
++		tuple->out.h_source, tuple->out.h_dest);
++
++	switch(tuple->xmit_type) {
++	case FLOW_OFFLOAD_XMIT_XFRM:
++	case FLOW_OFFLOAD_XMIT_NEIGH:
++		printk(KERN_CONT "iif=%d dst_cache->dev->ifindex=%d\n", tuple->iifidx, tuple->dst_cache->dev->ifindex);
++		break;
++	case FLOW_OFFLOAD_XMIT_DIRECT:
++		printk(KERN_CONT "iif=%d out.ifidx=%d(%d)\n", tuple->iifidx, tuple->out.ifidx, tuple->out.hw_ifidx);
++		break;
++	default:
++		printk(KERN_CONT "iif=%d Unknown xmit type=%d\n", tuple->iifidx, tuple->xmit_type);
++	}
++}
++
++static void print_one_flow(struct flow_offload *flow, void *data)
++{
++	int *count = data;
++	print_one_flow_tuple(&flow->tuplehash[FLOW_OFFLOAD_DIR_ORIGINAL].tuple);
++	print_one_flow_tuple(&flow->tuplehash[FLOW_OFFLOAD_DIR_REPLY].tuple);
++	*count += 1;
++}
++
++static void print_all_flows(void)
++{
++	struct nf_flowtable *flowtable;
++	int count;
++
++	list_for_each_entry(flowtable, &flowtables, list) {
++		count = 0;
++		nf_flow_table_iterate(flowtable, print_one_flow, &count);
++		printk(KERN_ERR "-------- (%s) # of flows = %d ------------\n",
++			flowtable->type->owner->name, count);
++	}
++}
++
++static ssize_t proc_print_all_flows(
++	struct file *file, char __user *ubuf,size_t count, loff_t *ppos)
++{
++	print_all_flows();
++	return 0;
++}
++
++int flush_flows_by_mac(char *mac_address)
++{
++	struct nf_flowtable *flowtable;
++	struct flush_flow_data data = {
++		.mac_address = mac_address,
++		.count = 0,
++	};
++	list_for_each_entry(flowtable, &flowtables, list) {
++		nf_flow_table_iterate(flowtable, nf_flow_table_do_teardown, &data);
++	}
++
++	return data.count;
++}
++EXPORT_SYMBOL_GPL(flush_flows_by_mac);
++
++static ssize_t proc_flush_flows(
++	struct file *file, const char __user *ubuf, size_t count, loff_t *ppos)
++{
++	char kbuf[24] = {0};
++	char mac[ETH_ALEN];
++	int flush_count, copy_count;
++
++	copy_count = min(count, sizeof(kbuf) - 1);
++
++	if(copy_from_user(kbuf, ubuf, copy_count))
++		return -EFAULT;
++
++	if (!strncmp(kbuf, "ALL", strlen("ALL"))) {
++		flush_count = flush_flows_by_mac(NULL);
++		printk(KERN_INFO "flush %d flows by all\n");
++	}
++	else if (sscanf(kbuf, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
++			&mac[0], &mac[1], &mac[2],
++			&mac[3], &mac[4], &mac[5]) == ETH_ALEN) {
++		flush_count = flush_flows_by_mac(mac);
++		printk(KERN_INFO "flush %d flows by %pM\n", flush_count, mac);
++	}
++
++	return count;
++}
++
++static struct proc_dir_entry *proc_entry;
++#define PROC_PATH "nf_flow_table"
++
++static const struct proc_ops proc_flow_table_ops = {
++	.proc_read = proc_print_all_flows,
++	.proc_write = proc_flush_flows,
++};
++
++static void create_new_proc_entry(void)
++{
++	extern struct net init_net;
++
++	proc_entry = proc_create(
++		PROC_PATH, 0, init_net.proc_net, &proc_flow_table_ops);
++}
++
++static void proc_cleanup(void)
++{
++	if (proc_entry)
++		remove_proc_entry(PROC_PATH, NULL);
++}
++#endif
++
+ static int __init nf_flow_table_module_init(void)
+ {
+ 	int ret;
+@@ -632,6 +772,10 @@ static int __init nf_flow_table_module_i
+ 	if (ret)
+ 		return ret;
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	create_new_proc_entry();
++#endif
++
+ 	ret = register_netdevice_notifier(&flow_offload_netdev_notifier);
+ 	if (ret)
+ 		nf_flow_table_offload_exit();
+@@ -641,6 +785,9 @@ static int __init nf_flow_table_module_i
+ 
+ static void __exit nf_flow_table_module_exit(void)
+ {
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++	proc_cleanup();
++#endif
+ 	unregister_netdevice_notifier(&flow_offload_netdev_notifier);
+ 	nf_flow_table_offload_exit();
+ }
+--- a/include/net/netfilter/nf_flow_table.h
++++ b/include/net/netfilter/nf_flow_table.h
+@@ -263,6 +263,9 @@ void nf_flow_table_cleanup(struct net_de
+ 
+ int nf_flow_table_init(struct nf_flowtable *flow_table);
+ void nf_flow_table_free(struct nf_flowtable *flow_table);
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++int flush_flows_by_mac(char *mac_address);
++#endif
+ 
+ void flow_offload_teardown(struct flow_offload *flow);
+ 
