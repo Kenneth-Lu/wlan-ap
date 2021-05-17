@@ -3,3 +3,11 @@ profile: DEVICE_bananapi_bpi-r64
 target: mediatek
 subtarget: mt7622
 description: Build image for the SmartRG 834_5
+packages:
+  - kmod-nft-bridge=y
+  - kmod-nft-core=y
+  - kmod-nft-nat=y
+  - kmod-nft-netdev=y
+  - kmod-nft-offload=y
+  - libnftnl=y
+  - nftables-json=y
