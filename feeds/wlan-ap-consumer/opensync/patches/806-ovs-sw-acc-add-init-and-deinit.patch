@@ -1,0 +1,24 @@
+--- a/vendor/adtran/rootfs/target/834-5/INSTALL_PREFIX/bin/start.sh
++++ b/vendor/adtran/rootfs/target/834-5/INSTALL_PREFIX/bin/start.sh
+@@ -117,3 +117,12 @@ ovsdb-client transact '
+         "other_config": ["map", [["stats-update-interval", "3600000"] ]]
+     }
+ }]'
++
++# add interfaces to fastpath ingress hook
++nftool.sh -c add -i wan
++nftool.sh -c add -i lan1
++nftool.sh -c add -i lan2
++nftool.sh -c add -i lan3
++nftool.sh -c add -i lan4
++nftool.sh -c add -i br-wan
++nftool.sh -c add -i br-lan
+--- a/vendor/adtran/rootfs/target/834-5/INSTALL_PREFIX/bin/stop.sh
++++ b/vendor/adtran/rootfs/target/834-5/INSTALL_PREFIX/bin/stop.sh
+@@ -110,3 +110,6 @@ ifconfig lan3 down
+ ifconfig lan2 down
+ ifconfig lan1 down
+ ifconfig wan down
++
++# flush all nfts/flowtables/rules about ovs-sw-acc
++nftool.sh -c flush
