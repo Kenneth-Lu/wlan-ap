@@ -68,7 +68,8 @@ TARGET_CFLAGS += \
 	-I$(STAGING_DIR)/usr/include \
 	-I$(STAGING_DIR)/usr/include/libnl-tiny \
 	-ffunction-sections \
-	-fdata-sections
+	-fdata-sections \
+	-DCONFIG_OVS_SOFTWARE_ACCELERATION
 
 TARGET_LDFLAGS += -Wl,--gc-sections
 
