@@ -1,0 +1,52 @@
+--- a/src/lib/inet/src/linux/inet_gretap.c
++++ b/src/lib/inet/src/linux/inet_gretap.c
+@@ -49,6 +49,17 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBI
+ #define CONFIG_INET_GRE_USE_GRETAP
+ #endif
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++/*
++ * $1 - command (add|del)
++ * $2 - interface name
++ */
++static char nftool[] =
++_S(
++    nftool.sh -c "$1" -i "$2"
++);
++#endif
++
+ /*
+  * $1 - interface name
+  * $2 - parent interface name
+@@ -235,6 +246,15 @@ bool inet_gretap_interface_start(inet_gr
+             return false;
+         }
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++        status = execsh_log(LOG_SEVERITY_INFO, nftool, "add", self->inet.in_ifname);
++        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
++        {
++            LOG(ERR, "inet_gretap: %s: Error adding GRETAP interface to fastpath.", self->inet.in_ifname);
++            return false;
++        }
++#endif
++
+         LOG(INFO, "inet_gretap: %s: GRETAP interface was successfully created.", self->inet.in_ifname);
+     }
+     else
+@@ -245,6 +265,15 @@ bool inet_gretap_interface_start(inet_gr
+             LOG(ERR, "inet_gretap: %s: Error deleting GRETAP interface.", self->inet.in_ifname);
+         }
+ 
++#ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
++        status = execsh_log(LOG_SEVERITY_INFO, nftool, "del", self->inet.in_ifname);
++        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
++        {
++            LOG(ERR, "inet_gretap: %s: Error removing GRETAP interface from fastpath.", self->inet.in_ifname);
++            return false;
++        }
++#endif
++
+         LOG(INFO, "inet_gretap: %s: GRETAP interface was successfully deleted.", self->inet.in_ifname);
+     }
+ 
