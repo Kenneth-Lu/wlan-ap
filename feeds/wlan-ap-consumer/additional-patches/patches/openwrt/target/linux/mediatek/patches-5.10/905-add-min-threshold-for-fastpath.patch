@@ -37,7 +37,7 @@
  		tcph = skb_header_pointer(pkt->skb, pkt->xt.thoff,
 --- a/net/netfilter/nf_flow_table_core.c
 +++ b/net/netfilter/nf_flow_table_core.c
-@@ -761,28 +761,80 @@ static ssize_t proc_flush_flows(
+@@ -753,28 +753,80 @@ static ssize_t proc_flush_flows(
  	return count;
  }
  

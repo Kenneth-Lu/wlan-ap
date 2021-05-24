@@ -10,7 +10,7 @@
  #include <net/ip.h>
  #include <net/ip6_route.h>
  #include <net/netfilter/nf_flow_table.h>
-@@ -624,6 +627,143 @@ static struct notifier_block flow_offloa
+@@ -624,6 +627,141 @@ static struct notifier_block flow_offloa
  	.notifier_call	= nf_flow_table_netdev_event,
  };
  
@@ -107,7 +107,7 @@
 +{
 +	char kbuf[24] = {0};
 +	char mac[ETH_ALEN];
-+	int flush_count, copy_count;
++	int copy_count;
 +
 +	copy_count = min(count, sizeof(kbuf) - 1);
 +
@@ -115,14 +115,12 @@
 +		return -EFAULT;
 +
 +	if (!strncmp(kbuf, "ALL", strlen("ALL"))) {
-+		flush_count = flush_flows_by_mac(NULL);
-+		printk(KERN_INFO "flush %d flows by all\n");
++		flush_flows_by_mac(NULL);
 +	}
 +	else if (sscanf(kbuf, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
 +			&mac[0], &mac[1], &mac[2],
 +			&mac[3], &mac[4], &mac[5]) == ETH_ALEN) {
-+		flush_count = flush_flows_by_mac(mac);
-+		printk(KERN_INFO "flush %d flows by %pM\n", flush_count, mac);
++		flush_flows_by_mac(mac);
 +	}
 +
 +	return count;
@@ -154,7 +152,7 @@
  static int __init nf_flow_table_module_init(void)
  {
  	int ret;
-@@ -632,6 +772,10 @@ static int __init nf_flow_table_module_i
+@@ -632,6 +770,10 @@ static int __init nf_flow_table_module_i
  	if (ret)
  		return ret;
  
@@ -165,7 +163,7 @@
  	ret = register_netdevice_notifier(&flow_offload_netdev_notifier);
  	if (ret)
  		nf_flow_table_offload_exit();
-@@ -641,6 +785,9 @@ static int __init nf_flow_table_module_i
+@@ -641,6 +783,9 @@ static int __init nf_flow_table_module_i
  
  static void __exit nf_flow_table_module_exit(void)
  {

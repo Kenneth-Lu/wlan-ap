@@ -48,7 +48,7 @@
  
 --- a/net/netfilter/nf_flow_table_core.c
 +++ b/net/netfilter/nf_flow_table_core.c
-@@ -715,6 +715,26 @@ int flush_flows_by_mac(char *mac_address
+@@ -715,6 +715,20 @@ int flush_flows_by_mac(char *mac_address
  }
  EXPORT_SYMBOL_GPL(flush_flows_by_mac);
  
@@ -62,12 +62,6 @@
 +			(skb->len == 6 || skb->len == 8))) {
 +		/* Standard L2UF has skb->len=6, but QCA boards produce L2UF with skb->len=8 */
 +		flush_count = flush_flows_by_mac(l2hdr->h_source);
-+		printk(KERN_INFO "flush %d flows by %02X:%02X:%02X:%02X:%02X:%02X from %s\n",
-+			flush_count,
-+			l2hdr->h_source[0], l2hdr->h_source[1],
-+			l2hdr->h_source[2], l2hdr->h_source[3],
-+			l2hdr->h_source[4], l2hdr->h_source[5],
-+			skb->dev ? skb->dev->name : "(null)");
 +	}
 +	return flush_count;
 +}
@@ -75,7 +69,7 @@
  static ssize_t proc_flush_flows(
  	struct file *file, const char __user *ubuf, size_t count, loff_t *ppos)
  {
-@@ -741,6 +761,8 @@ static ssize_t proc_flush_flows(
+@@ -739,6 +753,8 @@ static ssize_t proc_flush_flows(
  	return count;
  }
  
@@ -84,7 +78,7 @@
  static struct proc_dir_entry *proc_entry;
  #define PROC_PATH "nf_flow_table"
  
-@@ -774,6 +796,7 @@ static int __init nf_flow_table_module_i
+@@ -772,6 +788,7 @@ static int __init nf_flow_table_module_i
  
  #ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
  	create_new_proc_entry();
@@ -92,7 +86,7 @@
  #endif
  
  	ret = register_netdevice_notifier(&flow_offload_netdev_notifier);
-@@ -787,6 +810,7 @@ static void __exit nf_flow_table_module_
+@@ -785,6 +802,7 @@ static void __exit nf_flow_table_module_
  {
  #ifdef CONFIG_OVS_SOFTWARE_ACCELERATION
  	proc_cleanup();
