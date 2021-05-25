@@ -1,7 +1,7 @@
-Index: opensync-2.2.10.0/platform/cfg80211/src/lib/target/target_cfg80211.c
+Index: opensync-2.0.5.0/platform/cfg80211/src/lib/target/target_cfg80211.c
 ===================================================================
---- opensync-2.2.10.0.orig/platform/cfg80211/src/lib/target/target_cfg80211.c
-+++ opensync-2.2.10.0/platform/cfg80211/src/lib/target/target_cfg80211.c
+--- opensync-2.0.5.0.orig/platform/cfg80211/src/lib/target/target_cfg80211.c
++++ opensync-2.0.5.0/platform/cfg80211/src/lib/target/target_cfg80211.c
 @@ -1725,7 +1725,7 @@ hostap_ctrl_discover(const char *bss)
          hapd->respect_multi_ap = 1;
          hapd->ieee80211n = 1;
@@ -11,11 +11,11 @@ Index: opensync-2.2.10.0/platform/cfg80211/src/lib/target/target_cfg80211.c
          hapd->noscan = 1;
          util_radio_country_get(phy, hapd->country, sizeof(hapd->country));
          ctrl_enable(&hapd->ctrl);
-Index: opensync-2.2.10.0/src/lib/hostap/src/hapd.c
+Index: opensync-2.0.5.0/src/lib/hostap/src/hapd.c
 ===================================================================
---- opensync-2.2.10.0.orig/src/lib/hostap/src/hapd.c
-+++ opensync-2.2.10.0/src/lib/hostap/src/hapd.c
-@@ -617,6 +617,19 @@ hapd_conf_gen(struct hapd *hapd,
+--- opensync-2.0.5.0.orig/src/lib/hostap/src/hapd.c
++++ opensync-2.0.5.0/src/lib/hostap/src/hapd.c
+@@ -601,6 +601,20 @@ hapd_conf_gen(struct hapd *hapd,
      if (hapd->ieee80211ac)
          csnprintf(&buf, &len, "vht_capab=%s\n", hapd->vhtcaps);
  
@@ -32,6 +32,7 @@ Index: opensync-2.2.10.0/src/lib/hostap/src/hapd.c
 +        csnprintf(&buf, &len, "he_su_beamformer=1\n");
 +        csnprintf(&buf, &len, "he_mu_beamformer=1\n");
 +    }
- 
++
      /* FIXME: this should be able to implement min_hw_mode on setups where
       * hostapd's driver respects things like: supported_rates, basic_rates,
+      * beacon_rate,  etc.
