@@ -1,0 +1,37 @@
+Index: opensync-2.2.10.0/platform/cfg80211/src/lib/target/target_cfg80211.c
+===================================================================
+--- opensync-2.2.10.0.orig/platform/cfg80211/src/lib/target/target_cfg80211.c
++++ opensync-2.2.10.0/platform/cfg80211/src/lib/target/target_cfg80211.c
+@@ -1725,7 +1725,7 @@ hostap_ctrl_discover(const char *bss)
+         hapd->respect_multi_ap = 1;
+         hapd->ieee80211n = 1;
+         hapd->ieee80211ac = 1;
+-        hapd->ieee80211ax = 0;
++        hapd->ieee80211ax = 1;
+         hapd->noscan = 1;
+         util_radio_country_get(phy, hapd->country, sizeof(hapd->country));
+         ctrl_enable(&hapd->ctrl);
+Index: opensync-2.2.10.0/src/lib/hostap/src/hapd.c
+===================================================================
+--- opensync-2.2.10.0.orig/src/lib/hostap/src/hapd.c
++++ opensync-2.2.10.0/src/lib/hostap/src/hapd.c
+@@ -617,6 +617,19 @@ hapd_conf_gen(struct hapd *hapd,
+     if (hapd->ieee80211ac)
+         csnprintf(&buf, &len, "vht_capab=%s\n", hapd->vhtcaps);
+ 
++    if (hapd_11ax_enabled(rconf)) {
++        if (strcmp(rconf->freq_band, "2.4G")) {
++            csnprintf(&buf, &len, "he_oper_chwidth=%d\n",
++                      hapd_vht_oper_chwidth(rconf));
++            csnprintf(&buf, &len, "he_oper_centr_freq_seg0_idx=%d\n",
++                      hapd_vht_oper_centr_freq_idx(rconf));
++        }
++        csnprintf(&buf, &len, "he_default_pe_duration=4\n");
++        csnprintf(&buf, &len, "he_rts_threshold=1023\n");
++        csnprintf(&buf, &len, "he_su_beamformer=1\n");
++        csnprintf(&buf, &len, "he_su_beamformer=1\n");
++        csnprintf(&buf, &len, "he_mu_beamformer=1\n");
++    }
+ 
+     /* FIXME: this should be able to implement min_hw_mode on setups where
+      * hostapd's driver respects things like: supported_rates, basic_rates,
