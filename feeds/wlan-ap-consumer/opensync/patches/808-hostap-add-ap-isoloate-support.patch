@@ -1,0 +1,21 @@
+--- a/src/lib/hostap/src/hapd.c
++++ b/src/lib/hostap/src/hapd.c
+@@ -624,6 +624,9 @@ hapd_conf_gen(struct hapd *hapd,
+     if (vconf->rrm_exists)
+         csnprintf(&buf, &len, "rrm_neighbor_report=%d\n", !!vconf->rrm);
+ 
++    if (vconf->ap_bridge_exists)
++        csnprintf(&buf, &len, "ap_isolate=%d\n", !vconf->ap_bridge);
++
+     if (strlen(vconf->bridge) > 0)
+         csnprintf(&buf, &len, "bridge=%s\n", vconf->bridge);
+ 
+@@ -842,6 +845,8 @@ hapd_bss_get(struct hapd *hapd,
+         SCHEMA_SET_STR(vstate->ssid_broadcast, atoi(p) ? "disabled" : "enabled");
+     if ((vstate->uapsd_enable_exists = (p = ini_geta(conf, "uapsd_advertisement_enabled"))))
+         vstate->uapsd_enable = atoi(p);
++    if ((vstate->ap_bridge_exists = (p = ini_geta(conf, "ap_isolate"))))
++        vstate->ap_bridge = !atoi(p);
+ 
+     if (status) {
+         hapd_bss_get_security(vstate, conf, status);
