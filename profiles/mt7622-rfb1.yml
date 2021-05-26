@@ -17,3 +17,6 @@ packages:
 diffconfig: |
   CONFIG_TARGET_PROFILE="DEVICE_mediatek_mt7622-rfb1"
   CONFIG_TARGET_mediatek_mt7622_DEVICE_mediatek_mt7622-rfb1=y
+  # CONFIG_PACKAGE_wpad-basic-wolfssl is not set
+  CONFIG_DEFAULT_wpad-basic-wolfssl=n
+  CONFIG_DEFAULT_wpad-basic=y
