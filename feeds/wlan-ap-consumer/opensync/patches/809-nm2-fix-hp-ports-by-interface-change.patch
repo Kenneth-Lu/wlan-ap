@@ -1,0 +1,188 @@
+--- a/src/lib/ovs_mac_learn/src/ovs_mac_learn.c
++++ b/src/lib/ovs_mac_learn/src/ovs_mac_learn.c
+@@ -36,6 +36,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBI
+ #include "os_nif.h"
+ #include "target.h"
+ #include "schema.h"
++#include "ovsdb_table.h"
+ #include "ovsdb_update.h"
+ #include "ovsdb_sync.h"
+ #include "ovs_mac_learn.h"
+@@ -44,6 +45,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBI
+ 
+ #define OVSMAC_PERIODIC_TIMER   5000                    /**< Periodic timer in ms */
+ 
++static ovsdb_table_t            table_Openflow_Tag;
++
+ 
+ static ovsdb_update_monitor_t   bridge_mon;
+ static ovsdb_update_monitor_t   port_mon;
+@@ -124,6 +127,8 @@ bool ovsmac_init(void)
+ 
+     LOG(INFO, "OVSMAC: Initializing.");
+ 
++    OVSDB_TABLE_INIT_NO_KEY(Openflow_Tag);
++
+     /* Compile the regular expression for matching a single line from "ovs-appctl" */
+     if (regcomp(&ovs_appctl_re, "^ *([0-9]+|LOCAL) +([0-9]+) +(([A-Fa-f0-9]{2}:?){6})", REG_EXTENDED) != 0)
+     {
+@@ -659,11 +664,132 @@ void port_mon_fn(ovsdb_update_monitor_t
+  *  Interface table functions
+  * ===========================================================================
+  */
++
++static int
++oftag_ofport_replace(
++        const char *old_ofport,
++        const char *new_ofport,
++        const char *oftag)
++{
++    json_t *result;
++    json_t *where;
++    json_t *rows;
++    json_t *row, *row2;
++    int cnt;
++
++    LOGD("%s->%s: replacing oftag", old_ofport, new_ofport);
++
++    where = ovsdb_tran_cond(OCLM_STR,
++                            SCHEMA_COLUMN(Openflow_Tag, name),
++                            OFUNC_EQ,
++                            oftag);
++    if (!where) {
++        LOGW("%s->%s: failed to allocate ovsdb condition, oom?", old_ofport, new_ofport);
++        return -1;
++    }
++
++    row = ovsdb_mutation("cloud_value",
++                         json_string("delete"),
++                         json_string(old_ofport));
++    if (!row) {
++        LOGW("%s->%s: failed to allocate ovsdb mutation, oom?", old_ofport, new_ofport);
++        json_decref(where);
++        return -1;
++    }
++
++    row2 = ovsdb_mutation("cloud_value",
++                         json_string("insert"),
++                         json_string(new_ofport));
++    if (!row2) {
++        LOGW("%s->%s: failed to allocate ovsdb mutation, oom?", old_ofport, new_ofport);
++        json_decref(where);
++        json_decref(row);
++        return -1;
++    }
++
++    rows = json_array();
++    if (!rows) {
++        LOGW("%s->%s: failed to allocate ovsdb mutation list, oom?", old_ofport, new_ofport);
++        json_decref(where);
++        json_decref(row);
++        json_decref(row2);
++        return -1;
++    }
++
++    json_array_append_new(rows, row);
++    json_array_append_new(rows, row2);
++
++    result = ovsdb_tran_call_s("Openflow_Tag",
++                               OTR_MUTATE,
++                               where,
++                               rows);
++    if (!result) {
++        LOGW("%s->%s: failed to execute ovsdb transact", old_ofport, new_ofport);
++        return -1;
++    }
++
++    return ovsdb_get_update_result_count(result, "Openflow_Tag", "mutate");
++}
++
++static void interface_delete_cache_oftag_ofport(
++        char    *ifname,
++        json_t  *del_interface,
++        char    *old_ofport_str,
++        int      sz)
++{
++
++    json_t *ofport_json = NULL;
++    int ofport;
++
++    if (strcmp(ifname, "wifi5g"))
++        return;
++
++    if (!del_interface)
++        return;
++
++    ofport_json = json_object_get(del_interface, "ofport");
++    if (!json_is_integer(ofport_json))
++        return;
++
++    ofport = json_integer_value(ofport_json);
++    snprintf(old_ofport_str, sz, "%d", ofport);
++}
++
++static void interface_update_oftag_ofport(
++        char   *ifname,
++        json_t *new_interface,
++        char   *old_ofport_str,
++        int     sz)
++{
++    json_t *ofport_json = NULL;
++    int ofport;
++    char new_ofport_str[8] = {0};
++
++    if (strlen(old_ofport_str) <= 0)
++        return;
++
++    if (strcmp(ifname, "wifi5g"))
++        return;
++
++    if (!new_interface)
++        return;
++
++    ofport_json = json_object_get(new_interface, "ofport");
++    if (!json_is_integer(ofport_json))
++        return;
++
++    ofport = json_integer_value(ofport_json);
++    snprintf(new_ofport_str, sizeof(new_ofport_str), "%d", ofport);
++    oftag_ofport_replace(old_ofport_str, new_ofport_str, "hp_ports");
++    memset(old_ofport_str, 0, sz);
++}
++
+ void iface_mon_fn(ovsdb_update_monitor_t *self)
+ {
+     pjs_errmsg_t pjerr;
+ 
+     struct iface_node *ifn = NULL;
++    static char old_wifi5g_port_idx[16] = {0};
+ 
+     switch (self->mon_type)
+     {
+@@ -711,6 +837,13 @@ void iface_mon_fn(ovsdb_update_monitor_t
+                 return;
+             }
+ 
++            interface_update_oftag_ofport(
++                    ifn->if_iface.name,
++                    self->mon_json_new,
++                    old_wifi5g_port_idx,
++                    sizeof(old_wifi5g_port_idx));
++
++
+             LOG(DEBUG, "OVSMAC: Modified interface: %s", ifn->if_iface.name);
+             break;
+ 
+@@ -725,6 +858,12 @@ void iface_mon_fn(ovsdb_update_monitor_t
+ 
+             LOG(DEBUG, "OVSMAC: Deleted interface: %s", ifn->if_iface.name);
+ 
++            interface_delete_cache_oftag_ofport(
++                    ifn->if_iface.name,
++                    self->mon_json_old,
++                    old_wifi5g_port_idx,
++                    sizeof(old_wifi5g_port_idx));
++
+             ds_tree_remove(&iface_list, ifn);
+             free(ifn);
+ 
