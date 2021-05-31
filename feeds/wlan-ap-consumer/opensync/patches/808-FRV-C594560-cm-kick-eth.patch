@@ -1,0 +1,29 @@
+Index: opensync-2.0.5.0/src/cm2/src/cm2_ovsdb.c
+===================================================================
+--- opensync-2.0.5.0.orig/src/cm2/src/cm2_ovsdb.c
++++ opensync-2.0.5.0/src/cm2/src/cm2_ovsdb.c
+@@ -646,6 +646,12 @@ cm2_ovsdb_util_translate_master_port_sta
+ 
+     LOGN("%s: Detected new port_state = %s", master->if_name, master->port_state);
+ 
++    if (!strcmp(master->if_type, ETH_TYPE_NAME)) {
++	cm2_ovs_insert_port_into_bridge(CONFIG_TARGET_LAN_BRIDGE_NAME, master->if_name, port_state);
++	LOGD("%s: update ovs mac learning action %s", master->if_name, port_state ? "add" : "del");
++	return;
++    }
++
+     if (!strcmp(master->if_type, VIF_TYPE_NAME) && cm2_util_vif_is_sta(master->if_name)) {
+         if (!port_state &&
+             cm2_ovsdb_connection_get_connection_by_ifname(master->if_name, &con)) {
+@@ -2075,10 +2081,10 @@ int cm2_ovsdb_init(void)
+ 
+     // Initialize OVSDB monitor callbacks
+     OVSDB_TABLE_MONITOR(AWLAN_Node, false);
++    OVSDB_TABLE_MONITOR(Wifi_Master_State, false);
+ 
+     // Callback for EXTENDER
+     if (cm2_is_extender()) {
+-        OVSDB_TABLE_MONITOR(Wifi_Master_State, false);
+         OVSDB_TABLE_MONITOR(Connection_Manager_Uplink, false);
+         OVSDB_TABLE_MONITOR(Wifi_Inet_State, false);
+         OVSDB_TABLE_MONITOR(Bridge, false);
