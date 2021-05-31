@@ -1,0 +1,235 @@
+--- a/src/lib/ovs_mac_learn/src/ovs_mac_learn.c
++++ b/src/lib/ovs_mac_learn/src/ovs_mac_learn.c
+@@ -36,6 +36,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBI
+ #include "os_nif.h"
+ #include "target.h"
+ #include "schema.h"
++#include "ovsdb_table.h"
+ #include "ovsdb_update.h"
+ #include "ovsdb_sync.h"
+ #include "ovs_mac_learn.h"
+@@ -44,6 +45,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBI
+ 
+ #define OVSMAC_PERIODIC_TIMER   5000                    /**< Periodic timer in ms */
+ 
++static ovsdb_table_t            table_Openflow_Tag;
++static ovsdb_table_t            table_Openflow_Tag_Group;
++static ovsdb_table_t            table_Wifi_VIF_Config;
++#define OVS_OPENFLOW_TAG_TABLE  "Openflow_Tag"
++
+ 
+ static ovsdb_update_monitor_t   bridge_mon;
+ static ovsdb_update_monitor_t   port_mon;
+@@ -124,6 +130,10 @@ bool ovsmac_init(void)
+ 
+     LOG(INFO, "OVSMAC: Initializing.");
+ 
++    OVSDB_TABLE_INIT_NO_KEY(Openflow_Tag);
++    OVSDB_TABLE_INIT_NO_KEY(Openflow_Tag_Group);
++    OVSDB_TABLE_INIT_NO_KEY(Wifi_VIF_Config);
++
+     /* Compile the regular expression for matching a single line from "ovs-appctl" */
+     if (regcomp(&ovs_appctl_re, "^ *([0-9]+|LOCAL) +([0-9]+) +(([A-Fa-f0-9]{2}:?){6})", REG_EXTENDED) != 0)
+     {
+@@ -659,6 +669,183 @@ void port_mon_fn(ovsdb_update_monitor_t
+  *  Interface table functions
+  * ===========================================================================
+  */
++
++static int hp_ports_oftag_ofport_op(
++        const char *op,
++        const char *ofport,
++        const char *oftag)
++{
++    json_t *result;
++    json_t *where;
++    json_t *rows;
++    json_t *row;
++    int cnt;
++
++    where = ovsdb_tran_cond(OCLM_STR,
++                            SCHEMA_COLUMN(Openflow_Tag, name),
++                            OFUNC_EQ,
++                            oftag);
++    if (!where) {
++        LOGW("HP_PORTS: failed to allocate ovsdb condition, oom?");
++        return -1;
++    }
++
++    row = ovsdb_mutation("cloud_value",
++                         json_string(op),
++                         json_string(ofport));
++    if (!row) {
++        LOGW("HP_PORTS: failed to allocate ovsdb mutation, oom?");
++        json_decref(where);
++        return -1;
++    }
++
++    rows = json_array();
++    if (!rows) {
++        LOGW("HP_PORTS: failed to allocate ovsdb mutation list, oom?");
++        json_decref(where);
++        json_decref(row);
++        return -1;
++    }
++
++    json_array_append_new(rows, row);
++
++    result = ovsdb_tran_call_s(OVS_OPENFLOW_TAG_TABLE,
++                               OTR_MUTATE,
++                               where,
++                               rows);
++    if (!result) {
++        LOGW("HP_PORTS: failed to execute ovsdb transact");
++        return -1;
++    }
++
++    return ovsdb_get_update_result_count(result, OVS_OPENFLOW_TAG_TABLE, "mutate");
++}
++
++static bool hp_ports_get_oftag_by_ifname(char *ifname, char *buf, int buf_sz)
++{
++    bool rc;
++    struct schema_Wifi_VIF_Config vconf;
++    int i;
++
++    rc = ovsdb_table_select_one(&table_Wifi_VIF_Config,
++                                SCHEMA_COLUMN(Wifi_VIF_Config, if_name),
++                                ifname,
++                                &vconf);
++    if (!rc) {
++        return rc;
++    }
++
++    for (i = 0; i < vconf.security_len; i++) {
++        if (!strcmp(vconf.security_keys[i], "oftag")) {
++            snprintf(buf, buf_sz, "%s", vconf.security[i]);
++            return true;
++        }
++    }
++    return false;
++}
++
++static bool hp_ports_is_clients_contains(char *oftag)
++{
++    bool rc;
++    struct schema_Openflow_Tag_Group group;
++    int i;
++
++    rc = ovsdb_table_select_one(&table_Openflow_Tag_Group,
++                                SCHEMA_COLUMN(Openflow_Tag_Group, name),
++                                "hp_clients",
++                                &group);
++    if (!rc) {
++        return rc;
++    }
++    for (i = 0; i < group.tags_len; i++) {
++        if (strstr(group.tags[i], oftag)) {
++            return true;
++        }
++    }
++    return false;
++}
++
++static void hp_ports_interface_delete(char *name, json_t *del_interface)
++{
++    json_t *ofport_json = NULL;
++    int     ofport;
++    char    ofport_str[16];
++    char    oftag[16];
++    bool    rc;
++    char    oftag_key[16];
++
++    /* get schema_Wifi_VIF_Config.security.oftag by interface name */
++    rc = hp_ports_get_oftag_by_ifname(name, oftag, sizeof(oftag));
++    if (!rc) {
++        LOGW("HP_PORTS: failed to find name=%s in Wifi_VIF_Config", name);
++        return;
++    }
++
++    /* get pfport from deleted interface parameter */
++    ofport_json = json_object_get(del_interface, "ofport");
++    if (!json_is_integer(ofport_json)) {
++        LOGW("HP_PORTS: Invalid ofport");
++        return;
++    }
++    ofport = json_integer_value(ofport_json);
++    snprintf(ofport_str, sizeof(ofport_str), "%d", ofport);
++
++    /* delete ofport from home--1_ports for example */
++    snprintf(oftag_key, sizeof(oftag_key), "%s_ports", oftag);
++    rc = hp_ports_oftag_ofport_op("delete", ofport_str, oftag_key);
++    if (!rc) {
++        LOGW("HP_PORTS: failed to delete ofport=%s from oftag_group=%s", ofport_str, oftag_key);
++    }
++
++    /* delete ofport from hp_ports */
++    rc = hp_ports_oftag_ofport_op("delete", ofport_str, "hp_ports");
++    if (!rc) {
++        LOGW("HP_PORTS: failed to delete ofport=%s from oftag_group=hp_ports", ofport_str);
++    }
++}
++
++static void hp_ports_interface_modify(char *name, json_t *new_interface)
++{
++    json_t *ofport_json = NULL;
++    int     ofport;
++    char    ofport_str[16];
++    char    oftag[16];
++    bool    rc;
++    char    oftag_key[16];
++
++    /* get schema_Wifi_VIF_Config.security.oftag by interface name */
++    rc = hp_ports_get_oftag_by_ifname(name, oftag, sizeof(oftag));
++    if (!rc) {
++        LOGW("HP_PORTS: failed to find name=%s in Wifi_VIF_Config", name);
++        return;
++    }
++
++    /* get pfport from changed interface parameter */
++    ofport_json = json_object_get(new_interface, "ofport");
++    if (!json_is_integer(ofport_json)) {
++        LOGW("HP_PORTS: Invalid ofport");
++        return;
++    }
++    ofport = json_integer_value(ofport_json);
++    snprintf(ofport_str, sizeof(ofport_str), "%d", ofport);
++
++    /* add ofport to home--1_ports for example anyway */
++    snprintf(oftag_key, sizeof(oftag_key), "%s_ports", oftag);
++    rc = hp_ports_oftag_ofport_op("insert", ofport_str, oftag_key);
++    if (!rc) {
++        LOGW("HP_PORTS: failed to add ofport=%s to oftag_group=%s", ofport_str, oftag_key);
++    }
++
++    /* add ofport to hp_ports if hp_clients contains this oftag */
++    rc = hp_ports_is_clients_contains(oftag);
++    if (rc) {
++        rc = hp_ports_oftag_ofport_op("insert", ofport_str, "hp_ports");
++        if (!rc) {
++            LOGW("HP_PORTS: failed to add ofport=%s to oftag_group=hp_ports", ofport_str);
++        }
++    }
++}
++
+ void iface_mon_fn(ovsdb_update_monitor_t *self)
+ {
+     pjs_errmsg_t pjerr;
+@@ -711,6 +898,8 @@ void iface_mon_fn(ovsdb_update_monitor_t
+                 return;
+             }
+ 
++            hp_ports_interface_modify(ifn->if_iface.name, self->mon_json_new);
++
+             LOG(DEBUG, "OVSMAC: Modified interface: %s", ifn->if_iface.name);
+             break;
+ 
+@@ -725,6 +914,8 @@ void iface_mon_fn(ovsdb_update_monitor_t
+ 
+             LOG(DEBUG, "OVSMAC: Deleted interface: %s", ifn->if_iface.name);
+ 
++            hp_ports_interface_delete(ifn->if_iface.name, self->mon_json_old);
++
+             ds_tree_remove(&iface_list, ifn);
+             free(ifn);
+ 
