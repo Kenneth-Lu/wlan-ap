@@ -1,0 +1,116 @@
+Index: opensync-2.0.5.0/src/cm2/src/cm2_event.c
+===================================================================
+--- opensync-2.0.5.0.orig/src/cm2/src/cm2_event.c
++++ opensync-2.0.5.0/src/cm2/src/cm2_event.c
+@@ -537,6 +537,17 @@ start:
+             if (!cm2_is_extender()) {
+                 LOGD("%s Skip onboarding process target_type = %d",
+                      __func__, g_state.target_type);
++
++                /*
++                 * For Gateway only mode.
++                 * Gateway doesn't not advertise BLE onboarding message.
++                 * In Extender's case, AW_Bluetooth_Config is updated along with
++                 * Connection_Manager_Uplink. Since Gateway mode doesn't update
++                 * Connection_Manager_Uplink, AW_Bluetooth_Config is not update
++                 * as well. Therefore, we have to update here.
++                 */
++                cm2_ble_onboarding_apply_config();
++
+                 cm2_set_state(true, CM2_STATE_OVS_INIT);
+             } else {
+                 cm2_extender_init_state();
+@@ -688,6 +699,12 @@ start:
+                 // disconnect
+                 g_state.connected = false;
+                 cm2_ovsdb_set_Manager_target("");
++
++                /* For Gateway only mode. */
++                if (!cm2_is_extender()) {
++                    cm2_ble_onboarding_set_status(false, BLE_ONBOARDING_STATUS_CLOUD_OK);
++                    cm2_ble_onboarding_apply_config();
++                }
+             }
+             if (!g_state.connected)
+             {
+@@ -753,6 +770,12 @@ start:
+                 g_state.connected = false;
+                 cm2_ovsdb_set_Manager_target("");
+                 cm2_write_current_target_addr();
++
++                /* For Gateway only mode. */
++                if (!cm2_is_extender()) {
++                    cm2_ble_onboarding_set_status(false, BLE_ONBOARDING_STATUS_CLOUD_OK);
++                    cm2_ble_onboarding_apply_config();
++                }
+             }
+ 
+             if (g_state.connected)
+@@ -769,6 +792,16 @@ start:
+                 if (cm2_is_extender())
+                     cm2_connection_req_stability_check(LINK_CHECK | ROUTER_CHECK | INTERNET_CHECK);
+ 
++                /* For Gateway only mode. */
++                if (!cm2_is_extender() && cm2_is_connected_to(CM2_DEST_MANAGER)) {
++                    /* if the Gateway is connected to the cloud, enable all status */
++                    cm2_ble_onboarding_set_status(true, BLE_ONBOARDING_STATUS_ETHERNET_LINK);
++                    cm2_ble_onboarding_set_status(true, BLE_ONBOARDING_STATUS_ETHERNET_BACKHAUL);
++                    cm2_ble_onboarding_set_status(true, BLE_ONBOARDING_STATUS_ROUTER_OK);
++                    cm2_ble_onboarding_set_status(true, BLE_ONBOARDING_STATUS_INTERNET_OK);
++                    cm2_ble_onboarding_set_status(true, BLE_ONBOARDING_STATUS_CLOUD_OK);
++                    cm2_ble_onboarding_apply_config();
++                }
+             }
+ 
+             if (g_state.connected) {
+Index: opensync-2.0.5.0/src/cm2/src/cm2_ovsdb.c
+===================================================================
+--- opensync-2.0.5.0.orig/src/cm2/src/cm2_ovsdb.c
++++ opensync-2.0.5.0/src/cm2/src/cm2_ovsdb.c
+@@ -528,6 +528,7 @@ cm2_ovsdb_util_translate_master_ip(struc
+ {
+    bool is_sta;
+    int  ret;
++   int valid_ip;
+ 
+    LOGI("%s: Detected ip change = %s", master->if_name, master->inet_addr);
+ 
+@@ -536,6 +537,15 @@ cm2_ovsdb_util_translate_master_ip(struc
+    if (strcmp(master->if_name, CONFIG_TARGET_WAN_BRIDGE_NAME) && !is_sta)
+        return;
+ 
++   /* For Gateway only mode. */
++   if (!strcmp(master->if_name, CONFIG_TARGET_WAN_BRIDGE_NAME)) {
++       valid_ip = strcmp(master->inet_addr, "0.0.0.0") == 0 ? false : true;
++       cm2_ble_onboarding_set_status(valid_ip, BLE_ONBOARDING_STATUS_ETHERNET_BACKHAUL);
++       cm2_ble_onboarding_set_status(valid_ip, BLE_ONBOARDING_STATUS_ROUTER_OK);
++       cm2_ble_onboarding_set_status(valid_ip, BLE_ONBOARDING_STATUS_INTERNET_OK);
++       cm2_ble_onboarding_apply_config();
++   }
++
+    if (!(cm2_util_set_dhcp(master, false)))
+        return;
+ 
+@@ -646,6 +656,22 @@ cm2_ovsdb_util_translate_master_port_sta
+ 
+     LOGN("%s: Detected new port_state = %s", master->if_name, master->port_state);
+ 
++    /* For Gateway only mode. */
++    if (!strcmp(master->if_name, target_wan_interface_name())) {
++        if (!port_state) {
++            /* if the wan interface is unplugged, remove all status */
++            cm2_ble_onboarding_set_status(false, BLE_ONBOARDING_STATUS_ETHERNET_LINK);
++            cm2_ble_onboarding_set_status(false, BLE_ONBOARDING_STATUS_ETHERNET_BACKHAUL);
++            cm2_ble_onboarding_set_status(false, BLE_ONBOARDING_STATUS_ROUTER_OK);
++            cm2_ble_onboarding_set_status(false, BLE_ONBOARDING_STATUS_INTERNET_OK);
++            cm2_ble_onboarding_set_status(false, BLE_ONBOARDING_STATUS_CLOUD_OK);
++        } else {
++            cm2_ble_onboarding_set_status(true, BLE_ONBOARDING_STATUS_ETHERNET_LINK);
++        }
++        cm2_ble_onboarding_apply_config();
++        return;
++    }
++
+     if (!strcmp(master->if_type, ETH_TYPE_NAME)) {
+ 	cm2_ovs_insert_port_into_bridge(CONFIG_TARGET_LAN_BRIDGE_NAME, master->if_name, port_state);
+ 	LOGD("%s: update ovs mac learning action %s", master->if_name, port_state ? "add" : "del");
