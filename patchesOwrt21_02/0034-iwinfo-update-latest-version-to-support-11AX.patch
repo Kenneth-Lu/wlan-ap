@@ -1,0 +1,29 @@
+From d2ac1a3be540cdcd2217e4d9c69fff164fb9d440 Mon Sep 17 00:00:00 2001
+From: Kenneth Lu <klu@plume.com>
+Date: Mon, 7 Jun 2021 11:29:52 +0800
+Subject: [PATCH] iwinfo: update latest version to support 11AX
+
+---
+ package/network/utils/iwinfo/Makefile | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/package/network/utils/iwinfo/Makefile b/package/network/utils/iwinfo/Makefile
+index 3454d615a9..ddef8b6d2a 100644
+--- a/package/network/utils/iwinfo/Makefile
++++ b/package/network/utils/iwinfo/Makefile
+@@ -11,9 +11,9 @@ PKG_RELEASE:=1
+ 
+ PKG_SOURCE_PROTO:=git
+ PKG_SOURCE_URL=$(PROJECT_GIT)/project/iwinfo.git
+-PKG_SOURCE_DATE:=2021-01-31
+-PKG_SOURCE_VERSION:=4a32b33e9606f1bc1125f4bc24b0581349e55f2e
+-PKG_MIRROR_HASH:=414e5d150efaadba21103e66f862be66a94dcf83c16a2850f7c05051a9b0739d
++PKG_SOURCE_DATE:=2021-05-01
++PKG_SOURCE_VERSION:=c45f0b584b4b86f8250f90ea19afca271c114fa2
++PKG_MIRROR_HASH:=c78533303aabcd70025679a2fda57ba7c1970fff248677b389371a4666f634a8
+ PKG_MAINTAINER:=Jo-Philipp Wich <jo@mein.io>
+ PKG_LICENSE:=GPL-2.0
+ 
+-- 
+2.25.1
+
