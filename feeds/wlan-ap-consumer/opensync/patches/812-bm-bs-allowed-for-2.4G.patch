@@ -1,0 +1,21 @@
+Index: opensync-2.0.5.0/src/bm/src/bm_client.c
+===================================================================
+--- opensync-2.0.5.0.orig/src/bm/src/bm_client.c
++++ opensync-2.0.5.0/src/bm/src/bm_client.c
+@@ -2055,7 +2055,15 @@ bm_client_state_change(bm_client_t *clie
+             case BM_CLIENT_STATE_STEERING:
+             {
+                 for (i = 0; i < client->ifcfg_num; i++) {
+-                    if (!client->ifcfg[i].bs_allowed)
++                    LOGI("%s: i=%d client->ifcfg[i].ifname=%s bs_allowed=%d event.ifname=%s",
++                        __func__, i, client->ifcfg[i].ifname, client->ifcfg[i].bs_allowed, event.ifname);
++                    /*
++                     * At the moment BAND_STEERING_ATTEMPT is allowed only for
++                     * 2.4 to 5 GHz. Cloud expects BAND_STEERING_ATTEMPT to convey
++                     * information about "from" band (2.4 GHz), therefore we look
++                     * for iface with disable bs_allowed.
++                     */
++                    if (client->ifcfg[i].bs_allowed)
+                         continue;
+ 
+                     STRSCPY(event.ifname, client->ifcfg[i].ifname);
