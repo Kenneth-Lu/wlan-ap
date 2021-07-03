@@ -20,6 +20,10 @@ struct fsm_bc_mgr
     ds_tree_t fsm_sessions;
 };
 
+struct fsm_bc_offline
+{
+    uint32_t connection_failures;
+};
 
 /**
  * @brief a session, instance of processing state and routines.
@@ -41,6 +45,11 @@ struct fsm_bc_session
     long max_latency;
     long avg_latency;
     int lookup_cnt;
+    time_t stat_report_ts;
+    long health_stats_report_interval;
+    char *health_stats_report_topic;
+    struct fsm_url_stats health_stats;
+    struct fsm_bc_offline bc_offline;
     ds_tree_node_t session_node;
 };
 
@@ -82,6 +91,8 @@ void
 fsm_bc_periodic(struct fsm_session *session);
 
 
+void
+fsm_bc_update(struct fsm_session *session);
 /**
  * @brief looks up a session
  *
@@ -139,9 +150,9 @@ fsm_bc_report_cat(struct fsm_session *session,
  *
  */
 bool
-fsm_bc_cat_check(struct fsm_session *session,
-                 struct fsm_policy_req *req,
-                 struct fsm_policy *policy);
+fsm_bc_cat_check(struct fsm_policy_req *req,
+                 struct fsm_policy *policy,
+                 struct fsm_policy_reply *policy_reply);
 
 void
 fsm_bc_get_stats(struct fsm_session *session,

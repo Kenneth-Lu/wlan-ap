@@ -48,3 +48,4 @@ UNIT_EXPORT_LDFLAGS := -lcrypto -lssl
 
 UNIT_DEPS := src/lib/log
 UNIT_DEPS += src/lib/fsm_policy
+UNIT_DEPS += src/lib/network_telemetry

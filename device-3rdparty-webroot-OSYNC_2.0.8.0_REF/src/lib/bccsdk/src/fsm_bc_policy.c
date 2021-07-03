@@ -17,6 +17,15 @@
 #include "ovsdb_utils.h"
 
 #define NUM_CATS 100
+#define BC_NOT_RATED 77
+#define BC_UNRATED_TTL (60*60*24)
+
+struct fsm_bc_context
+{
+    struct fsm_policy_req *policy_request;
+    struct fsm_policy_reply *policy_reply;
+};
+
 static char *cat_strings[NUM_CATS] =
 {
     "Uncategorized",                        // 0
@@ -345,19 +354,21 @@ fsm_bc_update_params(struct fsm_session *session)
     bc_params_update(&params);
 }
 
-
-static
-void cloud_callback(struct bc_url_request* req, int rc)
+static void
+cloud_callback(struct bc_url_request *req, int rc)
 {
-    struct fqdn_pending_req *dpr;
+    struct fsm_policy_reply *policy_reply;
+    struct fsm_bc_context *bc_context;
 
-    dpr = (struct fqdn_pending_req *)req->context;
-    dpr->categorized = FSM_FQDN_CAT_SUCCESS;
+    bc_context = (struct fsm_bc_context *)req->context;
+    policy_reply = bc_context->policy_reply;
+
+    policy_reply->categorized = FSM_FQDN_CAT_SUCCESS;
     if (rc == -1)
     {
         LOGE("Cloud lookup for %s failed%s\n", req->url,
              req->connect_error ? ": connection failed" : "");
-        dpr->categorized = FSM_FQDN_CAT_FAILED;
+        policy_reply->categorized = FSM_FQDN_CAT_FAILED;
     }
 }
 
@@ -394,6 +405,7 @@ fsm_bc_update_latencies(struct fsm_bc_session *bc_session,
 }
 
 
+
 /**
  * @brief retrieves the categories of a fqdn
  *
@@ -403,26 +415,32 @@ fsm_bc_update_latencies(struct fsm_bc_session *bc_session,
  * @return true it categorization succeeded, false otherwise.
  */
 bool
-fsm_bc_cat_check(struct fsm_session *session,
-                 struct fsm_policy_req *req,
-                 struct fsm_policy *policy)
+fsm_bc_cat_check(struct fsm_policy_req *req,
+                 struct fsm_policy *policy,
+                 struct fsm_policy_reply *policy_reply)
 {
     struct fsm_bc_session *bc_session;
     struct fqdn_pending_req *fqdn_req;
     struct fsm_url_request *req_info;
     struct fsm_policy_rules *rules;
+    struct fsm_bc_context bc_context;
     struct fsm_url_reply *reply;
+    struct fsm_session *session;
     bool valid_fqdn = false;
     struct timespec start;
     struct timespec end;
     int res, i;
     bool rc;
+    bool ret;
 
+    session = req->session;
     rules = &policy->rules;
+    bc_context.policy_request = req;
+    bc_context.policy_reply = policy_reply;
 
     fqdn_req = req->fqdn_req;
     req_info = fqdn_req->req_info;
-    bc_session = fsm_bc_lookup_session(session);
+    bc_session = fsm_bc_lookup_session(session->service);
 
     for (i = 0; i < fqdn_req->numq; i++)
     {
@@ -431,6 +449,19 @@ fsm_bc_cat_check(struct fsm_session *session,
         bool loop;
 
         memset(&bc_req, 0, sizeof(bc_req));
+
+        /*
+         * 'reply' should not be allocated at this point. If allocated,
+         *  a fqdn request if already pending for the url. So return
+         *  to avoid a previos allocation, and memory leak due to missing
+         *  the free.
+         */
+        if (req_info->reply)
+        {
+            LOGW("%s: reply pending for %s", __func__, req_info->url);
+            return false;
+        }
+
         reply = calloc(1, sizeof(*reply));
         if (reply == NULL) return false;
         req_info->reply = reply;
@@ -438,7 +469,7 @@ fsm_bc_cat_check(struct fsm_session *session,
 
         strncpy(bc_req.url, req_info->url, BCA_URL_LENGTH);
         bc_req.req_id = fqdn_req->req_id;
-        bc_req.context = fqdn_req;
+        bc_req.context = &bc_context;
 
         memset(&start, 0, sizeof(start));
         memset(&end, 0, sizeof(end));
@@ -450,21 +481,25 @@ fsm_bc_cat_check(struct fsm_session *session,
             LOGE("%s::%s::%d: ERROR: bc cache lookup for %s failed\n",
                    __FILE__, __func__, __LINE__,
                    req_info->url);
-            fqdn_req->categorized = FSM_FQDN_CAT_FAILED;
+            policy_reply->categorized = FSM_FQDN_CAT_FAILED;
             reply->lookup_status = -1; /* indicate cache error */
             reply->error = res;
             return false;
         }
         else if (res > 0)
         {
-            fqdn_req->categorized = FSM_FQDN_CAT_SUCCESS;
+            policy_reply->categorized = FSM_FQDN_CAT_SUCCESS;
         }
         else
         {
             bc_req.serial = ++bc_serial;
 
-            valid_fqdn = fqdn_pre_validation(req_info->url);
-            if(!valid_fqdn) return false;
+            res = strncmp(req_info->url, "http", strlen("http"));
+            if (res)
+            {
+                valid_fqdn = fqdn_pre_validation(req_info->url);
+                if (!valid_fqdn) return false;
+            }
 
             memset(&start, 0, sizeof(start));
             memset(&end, 0, sizeof(end));
@@ -472,12 +507,16 @@ fsm_bc_cat_check(struct fsm_session *session,
             res = bc_cloud_lookup(&bc_req, cloud_callback);
             clock_gettime(CLOCK_REALTIME, &end);
             fsm_bc_update_latencies(bc_session, &start, &end);
-            if (fqdn_req->categorized == FSM_FQDN_CAT_FAILED)
+            if (policy_reply->categorized == FSM_FQDN_CAT_FAILED)
             {
                 LOGE("Cloud lookup for %s failed\n", req_info->url);
                 reply->lookup_status = bc_req.http_status;
                 reply->error = bc_req.error;
                 reply->connection_error = bc_req.connect_error;
+
+                /* increment connection failure counter */
+                bc_session->bc_offline.connection_failures++;
+                LOGT("%s(), incremented connection failure count :%d", __func__, bc_session->bc_offline.connection_failures);
 
                 return false;
             }
@@ -488,6 +527,21 @@ fsm_bc_cat_check(struct fsm_session *session,
         do {
             reply->categories[j] = bc_req.data.cc[j].category;
             reply->bc.confidence_levels[j] = bc_req.data.cc[j].confidence;
+
+            /*
+             * Overwrite TTL to large value for private/local ips
+             * and set fqdn flag.
+             */
+            if  (reply->categories[j] == BC_NOT_RATED)
+            {
+                /* update ttl only for local IP */
+                ret = is_private_ip(req_info->url);
+                if (ret == false) continue;
+
+                policy_reply->cache_ttl = BC_UNRATED_TTL;
+                policy_reply->cat_unknown_to_service = true;
+            }
+
             loop = (reply->categories[j] != 0);
             loop &= (j < URL_REPORT_MAX_ELEMS);
             if (loop) j++;
@@ -500,7 +554,7 @@ fsm_bc_cat_check(struct fsm_session *session,
         req_info++;
     }
 
-    rc = fsm_fqdncats_in_set(req, policy);
+    rc = fsm_fqdncats_in_set(req, policy, policy_reply);
     /*
      * If category in set and policy applies to categories out of the set,
      * no match
@@ -532,6 +586,7 @@ void fsm_bc_get_stats(struct fsm_session *session,
     stats->cloud_hits = bc_stats.cloud_hits;
     stats->cache_hits = bc_stats.cache_hits;
     stats->categorization_failures = bc_stats.bcap_errors;
+    stats->cloud_lookup_failures = bc_stats.net_errors;
     stats->uncategorized = bc_stats.uncat_responses;
     stats->cache_entries = bc_stats.cache_size;
     stats->cache_size = bc_stats.cache_max_entries;
