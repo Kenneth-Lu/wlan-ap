@@ -422,7 +422,7 @@ fsm_bc_cat_check(struct fsm_session *session,
 
     fqdn_req = req->fqdn_req;
     req_info = fqdn_req->req_info;
-    bc_session = fsm_bc_lookup_session(session);
+    bc_session = fsm_bc_lookup_session(session->service);
 
     for (i = 0; i < fqdn_req->numq; i++)
     {
@@ -463,8 +463,12 @@ fsm_bc_cat_check(struct fsm_session *session,
         {
             bc_req.serial = ++bc_serial;
 
-            valid_fqdn = fqdn_pre_validation(req_info->url);
-            if(!valid_fqdn) return false;
+            res = strncmp(req_info->url, "http", strlen("http"));
+            if (res)
+            {
+                valid_fqdn = fqdn_pre_validation(req_info->url);
+                if (!valid_fqdn) return false;
+            }
 
             memset(&start, 0, sizeof(start));
             memset(&end, 0, sizeof(end));
@@ -523,7 +527,7 @@ void fsm_bc_get_stats(struct fsm_session *session,
     struct fsm_bc_session *bc_session;
     struct bc_stats bc_stats;
 
-    bc_session = fsm_bc_lookup_session(session);
+    bc_session = fsm_bc_lookup_session(session->service);
 
     memset(&bc_stats, 0, sizeof(bc_stats));
     bc_stats_get(&bc_stats);
