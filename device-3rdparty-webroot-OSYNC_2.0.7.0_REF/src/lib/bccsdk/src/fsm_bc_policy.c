@@ -422,7 +422,7 @@ fsm_bc_cat_check(struct fsm_session *session,
 
     fqdn_req = req->fqdn_req;
     req_info = fqdn_req->req_info;
-    bc_session = fsm_bc_lookup_session(session);
+    bc_session = fsm_bc_lookup_session(session->service);
 
     for (i = 0; i < fqdn_req->numq; i++)
     {
@@ -431,6 +431,19 @@ fsm_bc_cat_check(struct fsm_session *session,
         bool loop;
 
         memset(&bc_req, 0, sizeof(bc_req));
+
+        /*
+         * 'reply' should not be allocated at this point. If allocated,
+         *  a fqdn request if already pending for the url. So return
+         *  to avoid a previos allocation, and memory leak due to missing
+         *  the free.
+         */
+        if (req_info->reply)
+        {
+            LOGW("%s: reply pending for %s", __func__, req_info->url);
+            return false;
+        }
+
         reply = calloc(1, sizeof(*reply));
         if (reply == NULL) return false;
         req_info->reply = reply;
@@ -463,8 +476,12 @@ fsm_bc_cat_check(struct fsm_session *session,
         {
             bc_req.serial = ++bc_serial;
 
-            valid_fqdn = fqdn_pre_validation(req_info->url);
-            if(!valid_fqdn) return false;
+            res = strncmp(req_info->url, "http", strlen("http"));
+            if (res)
+            {
+                valid_fqdn = fqdn_pre_validation(req_info->url);
+                if (!valid_fqdn) return false;
+            }
 
             memset(&start, 0, sizeof(start));
             memset(&end, 0, sizeof(end));
@@ -532,6 +549,7 @@ void fsm_bc_get_stats(struct fsm_session *session,
     stats->cloud_hits = bc_stats.cloud_hits;
     stats->cache_hits = bc_stats.cache_hits;
     stats->categorization_failures = bc_stats.bcap_errors;
+    stats->cloud_lookup_failures = bc_stats.net_errors;
     stats->uncategorized = bc_stats.uncat_responses;
     stats->cache_entries = bc_stats.cache_size;
     stats->cache_size = bc_stats.cache_max_entries;

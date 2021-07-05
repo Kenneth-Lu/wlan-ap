@@ -113,7 +113,11 @@ static int init_ssl_context(void) {
     SSL_load_error_strings();
     ERR_load_BIO_strings();
 
-    method = TLSv1_2_client_method();
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    method =  TLSv1_2_client_method();
+#else
+    method =  TLS_client_method();
+#endif
     SSLContext = SSL_CTX_new(method);
     if (!SSLContext) {
 	e = ERR_get_error();

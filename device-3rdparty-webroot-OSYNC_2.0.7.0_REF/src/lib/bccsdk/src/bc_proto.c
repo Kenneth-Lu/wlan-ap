@@ -75,6 +75,7 @@ static struct bcap_status StatusCodes[] = {
     {601, "Invalid OEM"},
     {602, "Invalid product"},
     {603, "License expired"},
+    {606, "No license"},
     {701, "No update available"},
     {703, "Invalid request"},
     {704, "Invalid major or minor version"},
