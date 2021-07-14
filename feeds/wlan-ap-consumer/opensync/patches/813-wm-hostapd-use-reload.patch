@@ -1,0 +1,37 @@
+--- a/src/lib/hostap/src/hapd.c
++++ b/src/lib/hostap/src/hapd.c
+@@ -59,7 +59,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBI
+ 
+ #define CONFIG_HAPD_DRIVER "nl80211" // FIXME: kconfig
+ #define CONFIG_HAPD_MAX_BSS 48 // FIXME: kconfig
+-#define CONFIG_HAPD_RELOAD_STOP_START 1
++#define CONFIG_HAPD_RELOAD_STOP_START 0
+ 
+ #define HAPD_SOCK_PATH(dphy, dvif) F("/var/run/hostapd-%s/%s", dphy, dvif)
+ #define HAPD_SOCK_DIR(dphy) F("/var/run/hostapd-%s", dphy)
+@@ -934,6 +934,16 @@ hapd_ctrl_remove(struct hapd *hapd)
+ }
+ 
+ static int
++hapd_ctrl_update(struct hapd *hapd)
++{
++    const char *arg = F("%s:%s", hapd->ctrl.bss, hapd->confpath);
++    int err = 0;
++    LOGI("%s: update", hapd->ctrl.bss);
++    err |= !strstr(HAPD_GLOB_CLI("raw", "UPDATE", arg) ?: "", "OK");
++    return err;
++}
++
++static int
+ hapd_ctrl_reload_psk(struct hapd *hapd)
+ {
+     LOGI("%s: reloading psk", hapd->ctrl.bss);
+@@ -949,7 +959,7 @@ hapd_ctrl_reload(struct hapd *hapd)
+         err |= WARN_ON(hapd_ctrl_add(hapd));
+     } else {
+         LOGI("%s: reloading", hapd->ctrl.bss);
+-        err |= strcmp("OK", HAPD_CLI(hapd, "reload") ?: "");
++        err |= WARN_ON(hapd_ctrl_update(hapd));
+     }
+     return err;
+ }
