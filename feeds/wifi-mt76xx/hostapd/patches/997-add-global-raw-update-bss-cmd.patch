@@ -1,6 +1,6 @@
 --- a/hostapd/ctrl_iface.c
 +++ b/hostapd/ctrl_iface.c
-@@ -4654,6 +4654,60 @@ static int hostapd_global_ctrl_iface_ifn
+@@ -4654,6 +4654,69 @@ static int hostapd_global_ctrl_iface_ifn
  						  from, fromlen);
  }
  
@@ -47,6 +47,15 @@
 +				conf->num_bss--;
 +				conf->bss[0] = NULL;
 +				hostapd_config_free(conf);
++				hostapd_flush_old_stations(hapd, WLAN_REASON_PREV_AUTH_NOT_VALID);
++#ifdef CONFIG_WEP
++				hostapd_broadcast_wep_clear(hapd);
++#endif
++#ifndef CONFIG_NO_RADIUS
++				/* TODO: update dynamic data based on changed configuration
++				 * items (e.g., open/close sockets, etc.) */
++				radius_client_flush(hapd->radius, 0);
++#endif /* CONFIG_NO_RADIUS */
 +				hostapd_reload_bss(hapd);
 +				return 0;
 +			}
@@ -61,7 +70,7 @@
  
  static void hostapd_global_ctrl_iface_receive(int sock, void *eloop_ctx,
  					      void *sock_ctx)
-@@ -4792,6 +4846,9 @@ static void hostapd_global_ctrl_iface_re
+@@ -4792,6 +4855,9 @@ static void hostapd_global_ctrl_iface_re
  			interfaces, buf + 10, reply, sizeof(buffer));
  	} else if (os_strcmp(buf, "TERMINATE") == 0) {
  		eloop_terminate();
@@ -73,7 +82,15 @@
  			   "ignored");
 --- a/src/ap/hostapd.c
 +++ b/src/ap/hostapd.c
-@@ -99,7 +99,7 @@ void hostapd_reconfig_encryption(struct
+@@ -57,7 +57,6 @@
+ #include "wpa_auth_kay.h"
+ 
+ 
+-static int hostapd_flush_old_stations(struct hostapd_data *hapd, u16 reason);
+ #ifdef CONFIG_WEP
+ static int hostapd_setup_encryption(char *iface, struct hostapd_data *hapd);
+ static int hostapd_broadcast_wep_clear(struct hostapd_data *hapd);
+@@ -99,7 +98,7 @@ void hostapd_reconfig_encryption(struct
  }
  
  
@@ -82,6 +99,15 @@
  {
  	struct hostapd_ssid *ssid;
  
+@@ -647,7 +646,7 @@ static int hostapd_setup_encryption(char
+ #endif /* CONFIG_WEP */
+ 
+ 
+-static int hostapd_flush_old_stations(struct hostapd_data *hapd, u16 reason)
++int hostapd_flush_old_stations(struct hostapd_data *hapd, u16 reason)
+ {
+ 	int ret = 0;
+ 	u8 addr[ETH_ALEN];
 --- a/src/ap/hostapd.h
 +++ b/src/ap/hostapd.h
 @@ -603,6 +603,7 @@ int hostapd_for_each_interface(struct ha
@@ -92,3 +118,11 @@
  struct hostapd_data *
  hostapd_alloc_bss_data(struct hostapd_iface *hapd_iface,
  		       struct hostapd_config *conf,
+@@ -624,6 +625,7 @@ void hostapd_interface_deinit_free(struc
+ int hostapd_enable_iface(struct hostapd_iface *hapd_iface);
+ int hostapd_reload_iface(struct hostapd_iface *hapd_iface);
+ int hostapd_disable_iface(struct hostapd_iface *hapd_iface);
++int hostapd_flush_old_stations(struct hostapd_data *hapd, u16 reason);
+ void hostapd_bss_deinit_no_free(struct hostapd_data *hapd);
+ void hostapd_free_hapd_data(struct hostapd_data *hapd);
+ void hostapd_cleanup_iface_partial(struct hostapd_iface *iface);
