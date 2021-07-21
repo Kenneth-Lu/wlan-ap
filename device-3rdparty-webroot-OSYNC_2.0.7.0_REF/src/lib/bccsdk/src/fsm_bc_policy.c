@@ -440,8 +440,14 @@ fsm_bc_cat_check(struct fsm_session *session,
          */
         if (req_info->reply)
         {
-            LOGW("%s: reply pending for %s", __func__, req_info->url);
-            return false;
+            /* skip policy check if the previous one has connection issue */
+            if (req_info->reply->connection_error) {
+                LOGW("%s: reply pending for %s", __func__, req_info->url);
+                return false;
+            } else {
+                free(req_info->reply);
+                req_info->reply = NULL;
+            }
         }
 
         reply = calloc(1, sizeof(*reply));
