@@ -1,0 +1,27 @@
+---
+description: wifi support for SmartRG 841-t6
+feeds:
+  - name: wifi
+    path: ../../feeds/wifi-mt76xx
+packages:
+  - batctl-default
+  - kmod-lib-cordic
+  - kmod-hwmon-core
+  - bash
+  - iwcap
+  - sgdisk
+  - lsblk
+  - gdisk
+  - fdisk
+  - usbutils
+  - file
+  - ethtool
+  - tcpdump
+diffconfig: |
+  CONFIG_DEVEL=y
+  CONFIG_BUILD_LOG=y
+  CONFIG_NEED_TOOLCHAIN=y
+  CONFIG_MODULES=y
+  CONFIG_BUSYBOX_CONFIG_USLEEP=y
+  CONFIG_PACKAGE_libcap-ng=y
+  CONFIG_OPENSYNC_TARGET="841-t6"
