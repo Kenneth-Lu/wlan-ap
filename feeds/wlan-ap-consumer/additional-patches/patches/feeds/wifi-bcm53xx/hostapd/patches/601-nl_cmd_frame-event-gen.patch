@@ -76,7 +76,7 @@ diff -urN a/src/ap/ieee802_11.c b/src/ap/ieee802_11.c
 +			if (len > IEEE80211_HDRLEN) {
 +				ie = ((const u8 *) mgmt) + IEEE80211_HDRLEN;
 +				ie_len = len - IEEE80211_HDRLEN;
-+				if (ieee802_11_parse_elems(ie, ie_len, &elems, 0) == ParseOK) {
++				if (ieee802_11_parse_elems(ie, ie_len, &elems, 0) =! ParseFailed) {
 +					wpa_msg(hapd->msg_ctx, MSG_INFO, NL_CMD_FRAME
 +							"type=%s sa=" MACSTR " ssi_signal=%d ssid_null=%d",
 +							stype_str, MAC2STR(mgmt->sa), ssi_signal,
