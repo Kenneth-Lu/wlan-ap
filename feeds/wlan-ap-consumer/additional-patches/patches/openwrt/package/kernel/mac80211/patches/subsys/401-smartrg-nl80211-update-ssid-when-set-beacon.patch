@@ -1,0 +1,16 @@
+Index: net/wireless/nl80211.c
+===================================================================
+--- a/net/wireless/nl80211.c
++++ b/net/wireless/nl80211.c
+@@ -5414,6 +5414,12 @@ static int nl80211_set_beacon(struct sk_
+ 	err = rdev_change_beacon(rdev, dev, &params);
+ 	wdev_unlock(wdev);
+ 
++	if (!err && info->attrs[NL80211_ATTR_SSID]) {
++		wdev->ssid_len = nla_len(info->attrs[NL80211_ATTR_SSID]);
++		memcpy(wdev->ssid,
++			nla_data(info->attrs[NL80211_ATTR_SSID]), wdev->ssid_len);
++	}
++
+ 	return err;
+ }
