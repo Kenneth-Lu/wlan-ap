@@ -1,18 +1,5 @@
 Index: opensync-2.0.5.0/platform/cfg80211/src/lib/target/target_cfg80211.c
 ===================================================================
---- opensync-2.0.5.0.orig/platform/cfg80211/src/lib/target/target_cfg80211.c
-+++ opensync-2.0.5.0/platform/cfg80211/src/lib/target/target_cfg80211.c
-@@ -1725,7 +1725,7 @@ hostap_ctrl_discover(const char *bss)
-         hapd->respect_multi_ap = 1;
-         hapd->ieee80211n = 1;
-         hapd->ieee80211ac = 1;
--        hapd->ieee80211ax = 0;
-+        hapd->ieee80211ax = 1;
-         hapd->noscan = 1;
-         util_radio_country_get(phy, hapd->country, sizeof(hapd->country));
-         ctrl_enable(&hapd->ctrl);
-Index: opensync-2.0.5.0/src/lib/hostap/src/hapd.c
-===================================================================
 --- opensync-2.0.5.0.orig/src/lib/hostap/src/hapd.c
 +++ opensync-2.0.5.0/src/lib/hostap/src/hapd.c
 @@ -601,6 +601,20 @@ hapd_conf_gen(struct hapd *hapd,
